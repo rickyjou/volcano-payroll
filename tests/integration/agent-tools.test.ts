@@ -97,3 +97,33 @@ describe('employee time tools', () => {
     expect((await tool('show_profile').run(alice(), {})).text).toBe(`alice Test (${org.alice.email}), employee. Pay: hourly, $25.00 / hour.`);
   });
 });
+
+describe('approval tools', () => {
+  const manager = () => ctxOf(org.manager, 'manager');
+
+  it('lists what is waiting with Approve and Return buttons', async () => {
+    await tool('submit_timesheet').run(ctxOf(org.alice, 'employee'), {});
+    const r = await tool('list_pending_approvals').run(manager(), {});
+    const table = cardOf(r.cards, 'table');
+    expect(table.rows).toEqual([['alice Test', 'October 2026', 'submitted', '8h']]);
+    expect(table.rowActions![0].map((a) => [a.label, a.request.tool, a.needsNote ?? false])).toEqual([['Approve', 'approve_timesheets', false], ['Return', 'return_timesheet', true]]);
+  });
+
+  it("can't touch a timesheet that isn't a direct report's", async () => {
+    const existing = await ok<{ id: string }>(service().from('timesheets').select('id').eq('employee_id', org.bob.employeeId));
+    const [{ id }] = existing.length ? existing : await ok<{ id: string }>(service().insert('timesheets', { employee_id: org.bob.employeeId, pay_period_id: october }));
+    await expect(tool('approve_timesheets').confirm!(manager(), { timesheets: [id] })).rejects.toThrow('Timesheet not found');
+  });
+
+  it('returns with a note, shows team status, and approves', async () => {
+    const [{ id }] = await ok<{ id: string }>(service().from('timesheets').select('id').eq('employee_id', org.alice.employeeId));
+    expect((await tool('show_employee_timesheet').run(manager(), { timesheet: id })).text).toBe('alice Test, October 2026: submitted, total 8h.');
+    expect((await tool('return_timesheet').run(manager(), { timesheet: id, note: 'Missing Monday' })).text).toBe("Returned alice Test's October 2026 timesheet with your note.");
+    expect((await tool('team_status').run(manager(), {})).text).toBe('October 2026: 0 approved, 0 submitted, 1 in progress, 0 not started.');
+    await tool('submit_timesheet').run(ctxOf(org.alice, 'employee'), {});
+    expect((await tool('approve_timesheets').run(manager(), { timesheets: [id] })).text).toBe('Approved alice Test (October 2026).');
+    // Approved meanwhile (another tab, or the Approvals screen): refuse instead of claiming success.
+    expect((await refusalOf(tool('approve_timesheets').confirm!(manager(), { timesheets: [id] }))).message)
+      .toBe("Nothing to approve: alice Test's October 2026 timesheet is approved, not waiting for approval.");
+  });
+});
