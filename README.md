@@ -55,7 +55,54 @@ npm run typecheck
 npm run test:integration   # needs the local stack; WIPES the local payroll database
 ```
 
-`tests/integration/functions.test.ts` also needs the functions deployed locally (see above).
+`tests/integration/functions.test.ts`, `agent.test.ts` and `agent-tools.test.ts` also need the functions deployed locally (see above).
+
+## Chat assistant
+
+Every page has a **Chat** button. Employees log time ("log 8 hours for today") and submit
+at month end; managers ask "what needs my approval?" and approve or return timesheets;
+admins run the monthly cycle and manage people, pay, settings, API keys and webhooks.
+
+How a message is handled (`src/agent/`):
+
+1. A **decision model** (a "decider", e.g. Strands Decider 2B or Jev) answers typed
+   questions about the message: which tool, which timesheet / employee / month.
+   Dates, hours, earning codes and export formats are read by plain parsers.
+2. When it is confident (`AGENT_DECIDER_THRESHOLD`, default 0.9) and every argument is
+   filled, the tool runs **without an LLM call**. If only the day or the timesheet is
+   missing, the assistant asks with buttons.
+3. Otherwise a **generative LLM** with tool calling handles the turn, using the same tools.
+
+The agent always acts **as the signed-in user** (their token, so RLS and the Functions'
+checks apply) and never uses the service key. Logging your own hours on an empty day
+happens at once with Undo; anything that would replace hours, and every other change,
+shows a confirmation card first. Conversations are private to each user and kept 30 days.
+
+Server-only variables (in `web/.env.local` locally, frontend variables in the cloud):
+
+| Variable | Meaning |
+|---|---|
+| `DECIDER_URL`, `DECIDER_TOKEN`, `DECIDER_MODEL` | A Strands Decider-compatible `POST /v1/systemone` endpoint (token and model optional) |
+| `LLM_URL`, `LLM_MODEL`, `LLM_TOKEN` | An OpenAI-compatible chat-completions endpoint with tool calling (`{LLM_URL}/chat/completions`) |
+| `AGENT_DECIDER_THRESHOLD` | Minimum decider confidence for acting without the LLM (default 0.9) |
+
+Without a decider every message goes to the LLM; without an LLM only requests the decider
+handles work. Locally you can run either:
+
+```sh
+npm run dev:decider                         # keyword stand-in on :8100 (DEVELOPMENT ONLY)
+# or the real model (downloads ~4.5 GB the first time; Apple silicon: --device mps)
+pip install strands-decider
+strands-decider serve StrandsAgents/strands-decider-2B-hobson-v19 --port 8000
+```
+
+Then set `DECIDER_URL=http://127.0.0.1:8100` (or `:8000`) in `web/.env.local` and restart `npm run dev`.
+
+**Choosing the threshold.** `tests/agent/decider-cases.jsonl` holds 150 labelled messages
+(50 per role). `npm run eval:decider -- --url <decider>` reports accuracy, how many turns
+skip the LLM, and wrong answers per threshold, and exits non-zero if any write is wrong at
+the chosen threshold. Use the lowest threshold with no wrong writes, and re-run it whenever
+the model or the questions change. The keyword stand-in fails this on purpose.
 
 ## Monthly payroll
 
@@ -118,7 +165,8 @@ npm run cloud -- cloud config deploy
 rm -rf /tmp/payroll-src && mkdir /tmp/payroll-src && git archive HEAD | tar -x -C /tmp/payroll-src
 npm run cloud -- cloud frontends deploy --name payroll --path /tmp/payroll-src --app-root web \
   --variable-scope scoped --variable NEXT_PUBLIC_VOLCANO_API_URL --variable NEXT_PUBLIC_VOLCANO_ANON_KEY \
-  --variable NEXT_PUBLIC_VOLCANO_DATABASE --variable VOLCANO_API_URL --variable VOLCANO_DATABASE --variable VOLCANO_SERVICE_KEY
+  --variable NEXT_PUBLIC_VOLCANO_DATABASE --variable VOLCANO_API_URL --variable VOLCANO_DATABASE --variable VOLCANO_SERVICE_KEY \
+  --variable DECIDER_URL --variable DECIDER_TOKEN --variable LLM_URL --variable LLM_MODEL --variable LLM_TOKEN --variable AGENT_DECIDER_THRESHOLD
 ```
 
 Cloud variables:
