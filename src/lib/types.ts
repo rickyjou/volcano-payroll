@@ -81,6 +81,7 @@ export type WarningCode =
   | 'NO_APPROVED_TIMESHEET'
   | 'NO_COMPENSATION'
   | 'HOURS_OVER_24'
+  | 'ENTRY_UNIT_MISMATCH'
   | 'ENTRY_OUTSIDE_EMPLOYMENT';
 
 export interface CalcWarning {

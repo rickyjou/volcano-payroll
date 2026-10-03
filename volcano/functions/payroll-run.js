@@ -251,6 +251,16 @@ function calculateRun(input) {
       warn("HOURS_OVER_24", true, `${name(emp)} has more than 24 hours on ${overDays.join(", ")}`);
       continue;
     }
+    const unpaid = entries.filter((e) => {
+      const payType = compByDay.get(e.work_date).pay_type;
+      if (payType === "hourly") return !(e.hours ?? 0) && !!(e.days ?? 0);
+      if (payType === "daily") return !(e.days ?? 0) && !!(e.hours ?? 0);
+      return false;
+    }).map((e) => e.work_date);
+    if (unpaid.length > 0) {
+      warn("ENTRY_UNIT_MISMATCH", true, `${name(emp)} has time in the wrong unit for their pay type on ${[...new Set(unpaid)].join(", ")}`);
+      continue;
+    }
     employeeCount += 1;
     const acc = new LineAccumulator(emp);
     addSalary(acc, days, compByDay, periodWorkdays);

@@ -210,3 +210,22 @@ describe('splitOvertime', () => {
     ]);
   });
 });
+
+describe('entries in the wrong unit for the day', () => {
+  it('blocks when days are entered on a day paid hourly (pay type changed mid-month)', () => {
+    const r = calculateRun(single(
+      [comp('a', 'hourly', 2500), comp('a', 'daily', 20_000, '2026-09-16')],
+      [reg('2026-09-01', null, 1), reg('2026-09-16', null, 1)],
+    ));
+    expect(r.warnings).toEqual([expect.objectContaining({ code: 'ENTRY_UNIT_MISMATCH', blocking: true })]);
+    expect(r.warnings[0].message).toContain('2026-09-01');
+  });
+  it('blocks when hours are entered on a day paid by the day', () => {
+    const r = calculateRun(single([comp('a', 'daily', 20_000)], [reg('2026-09-01', 8)]));
+    expect(r.warnings).toEqual([expect.objectContaining({ code: 'ENTRY_UNIT_MISMATCH', blocking: true })]);
+  });
+  it('accepts hours alongside days for daily-rate overtime', () => {
+    const r = calculateRun(single([comp('a', 'daily', 20_000)], [reg('2026-09-01', 10, 1)]));
+    expect(r.warnings).toEqual([]);
+  });
+});
