@@ -12,8 +12,11 @@ export interface LlmTool { name: string; description: string; parameters: Record
 
 export interface LlmResult { text: string; toolCalls: LlmToolCall[] }
 
+/** `timeoutMs` is what is left of the turn's budget; the client stops waiting then. */
+export interface LlmRequest { messages: LlmMessage[]; tools: LlmTool[]; timeoutMs?: number }
+
 export interface Llm {
-  complete(req: { messages: LlmMessage[]; tools: LlmTool[] }): Promise<LlmResult>;
+  complete(req: LlmRequest): Promise<LlmResult>;
 }
 
 export interface OpenAiCompatibleOptions {
@@ -29,7 +32,7 @@ interface WireToolCall { id: string; type: 'function'; function: { name: string;
 export class OpenAiCompatibleLlm implements Llm {
   constructor(private readonly opts: OpenAiCompatibleOptions) {}
 
-  async complete(req: { messages: LlmMessage[]; tools: LlmTool[] }): Promise<LlmResult> {
+  async complete(req: LlmRequest): Promise<LlmResult> {
     const f = this.opts.fetchImpl ?? fetch;
     const res = await f(`${this.opts.url.replace(/\/+$/, '')}/chat/completions`, {
       method: 'POST',
@@ -43,7 +46,7 @@ export class OpenAiCompatibleLlm implements Llm {
         tools: req.tools.map((t) => ({ type: 'function', function: { name: t.name, description: t.description, parameters: t.parameters } })),
         tool_choice: 'auto',
       }),
-      signal: AbortSignal.timeout(this.opts.timeoutMs ?? 20_000),
+      signal: AbortSignal.timeout(Math.min(this.opts.timeoutMs ?? 20_000, req.timeoutMs ?? Infinity)),
     });
     if (!res.ok) throw new Error(`LLM returned HTTP ${res.status}`);
     const body = (await res.json()) as { choices?: { message?: { content?: string | null; tool_calls?: WireToolCall[] } }[] };

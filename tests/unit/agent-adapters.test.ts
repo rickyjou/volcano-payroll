@@ -64,4 +64,14 @@ describe('OpenAiCompatibleLlm', () => {
     const out = await new OpenAiCompatibleLlm({ url: 'http://llm', model: 'm', fetchImpl: f.impl }).complete({ messages: [], tools: [] });
     expect(out.toolCalls[0].args).toBeNull();
   });
+  it("gives up when the turn's remaining time runs out, even before its own timeout", async () => {
+    // A server that never answers; only the abort signal ends the request.
+    const hang = ((_url: string, init: RequestInit) => new Promise((_, reject) => {
+      init.signal?.addEventListener('abort', () => reject(init.signal!.reason));
+    })) as unknown as typeof fetch;
+    const llm = new OpenAiCompatibleLlm({ url: 'http://llm', model: 'm', timeoutMs: 20_000, fetchImpl: hang });
+    const started = Date.now();
+    await expect(llm.complete({ messages: [], tools: [], timeoutMs: 50 })).rejects.toThrow();
+    expect(Date.now() - started).toBeLessThan(5_000);
+  });
 });

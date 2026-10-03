@@ -33,27 +33,61 @@ function withoutDates(text: string): string {
     .replace(/\b\d{1,2}\/\d{1,2}(\/\d{2,4})?\b/g, ' ');
 }
 
-/** "8", "7.5h", "8:30", "8 hours", "half day", "a full day", "1 day" → hours or days. */
+// Phrasings an amount must not be guessed from: minutes, clock times and time ranges.
+const MINUTES_RE = /\b\d+\s*(m|mins?|minutes?)\b/;
+const CLOCK_RE = /\b\d{1,2}(:\d{2})?\s*(am|pm)\b|\b\d{1,2}(:\d{2})?\s*(-|–|to|until|till)\s*\d{1,2}(:\d{2})?\b/;
+
+/** "8", "7.5h", "8:30", "8 hours", "half day", "a full day", "1 day" → hours or days.
+ *  Null when the message is ambiguous (minutes, a time range, several amounts). */
 export function parseAmount(text: string): Amount | null {
   const t = withoutDates(text.toLowerCase());
+  if (MINUTES_RE.test(t) || CLOCK_RE.test(t)) return null;
   if (/\b(half|1\/2|½)[\s-]*(a\s+)?day\b|\b0?\.5\s*days?\b/.test(t)) return { days: 0.5 };
   if (/\b(full|whole|one|a|1)\s+day\b|\b1(\.0)?\s*days?\b/.test(t)) return { days: 1 };
   const hm = /\b(\d{1,2}):([0-5]\d)\b/.exec(t);
   if (hm) return { hours: Number(hm[1]) + Number(hm[2]) / 60 };
   const n = /(?:^|[^\d.])(\d{1,2}(?:\.\d{1,2})?)\s*(?:h\b|hr\b|hrs\b|hours?\b)?/.exec(t);
   if (!n) return null;
+  if ((t.match(/(?:^|[^\d.])\d{1,2}(?:\.\d{1,2})?(?![\d.])/g) ?? []).length > 1) return null;
   const hours = Number(n[1]);
   return hours > 0 ? { hours } : null;
 }
 
-/** "today", "yesterday", "friday", "last friday", "the 12th", "oct 3", "3 october", "2026-10-03", "10/3". */
+const DAY_PATTERNS = [
+  /\b\d{4}-\d{2}-\d{2}\b/g,
+  new RegExp(`\\b${MONTH_RE}\\.?\\s+\\d{1,2}(st|nd|rd|th)?\\b`, 'gi'),
+  new RegExp(`\\b\\d{1,2}(st|nd|rd|th)?\\s+(of\\s+)?${MONTH_RE}\\b`, 'gi'),
+  /\b\d{1,2}\/\d{1,2}(\/\d{2,4})?\b/g,
+  /\b\d{1,2}(st|nd|rd|th)\b/g,
+  /\bday before yesterday\b/g,
+  /\btoday\b|\btonight\b|\bthis (morning|afternoon|evening)\b|\byesterday\b/g,
+  new RegExp(`\\b${WEEKDAY_RE}\\b`, 'gi'),
+];
+
+/** How many separate days the message names ("yesterday and 6 today" names two). */
+function dayMentions(t: string): number {
+  let rest = t;
+  let n = 0;
+  for (const re of DAY_PATTERNS) {
+    rest = rest.replace(re, () => {
+      n += 1;
+      return ' ';
+    });
+  }
+  return n;
+}
+
+/** "today", "yesterday", "friday", "last friday", "the 12th", "oct 3", "3 october", "2026-10-03", "10/3".
+ *  Null when the message names several days or a future weekday ("next friday"). */
 export function parseDay(text: string, today: ISODate): ISODate | null {
   const t = text.toLowerCase();
+  if (dayMentions(t) > 1) return null;
+  if (new RegExp(`\\b(next|coming|this coming)\\s+${WEEKDAY_RE}\\b`, 'i').test(t)) return null;
   const iso = /\b(\d{4})-(\d{2})-(\d{2})\b/.exec(t);
   if (iso) return validDate(Number(iso[1]), Number(iso[2]), Number(iso[3]));
   if (/\btoday\b|\btonight\b|\bthis (morning|afternoon|evening)\b/.test(t)) return today;
-  if (/\byesterday\b/.test(t)) return addDays(today, -1);
   if (/\bday before yesterday\b/.test(t)) return addDays(today, -2);
+  if (/\byesterday\b/.test(t)) return addDays(today, -1);
 
   const year = Number(today.slice(0, 4));
   const md = new RegExp(`\\b${MONTH_RE}\\.?\\s+(\\d{1,2})(?:st|nd|rd|th)?\\b`, 'i').exec(t)
@@ -109,7 +143,9 @@ export function parseCode(text: string): EntryCode {
 
 /** True when the message adds to existing time rather than setting it. */
 export const isAdditive = (text: string): boolean =>
-  /\b(more|another|extra|additional|add|plus)\b/i.test(text) && !/\b(instead|replace|change it to|make it)\b/i.test(text);
+  /\b(more|another|extra|additional|add|plus)\b/i.test(text)
+  && !/\b(instead|replace|change it to|make it)\b/i.test(text)
+  && !/\b(not|no|don'?t|without)\s+(any\s+)?(more|extra|additional|add)\b/i.test(text);
 
 /** Export format named in the message (preset keys from src/lib/exporters/presets.ts). */
 export function parseFormat(text: string): string | null {

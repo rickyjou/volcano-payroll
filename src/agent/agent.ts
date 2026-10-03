@@ -12,7 +12,7 @@ import { DEFAULT_THRESHOLD, deciderQuestions, deciderState, route, type Answers 
 import {
   CONFIRM_TTL_MS, createAction, getAction, history, latestPending, moveAction, recentTurns, saveMessage, type MessageMeta,
 } from './store';
-import { CONFIRM_CHOICES, monthLabel, sentence } from './tools/common';
+import { CONFIRM_CHOICES, monthLabel, periodArg, sentence } from './tools/common';
 import { toolByName, toolsFor } from './tools';
 import { Refusal, type AgentContext, type AgentTool, type AgentUser, type Card, type ChatMessage, type ToolCtx } from './types';
 
@@ -55,6 +55,7 @@ interface Outcome {
 const MAX_MESSAGE = 2000;
 const TURN_BUDGET_MS = 25_000;
 const LLM_ROUNDS = 4;
+const LLM_TIMEOUT_MS = 20_000;
 
 const HELP: Record<AgentUser['role'], string[]> = {
   employee: ['Log 8 hours for today', 'Log a half day of PTO on Friday', 'Show my timesheet', 'Submit my timesheet', 'What was my pay last month?'],
@@ -73,7 +74,7 @@ export async function handleAgentRequest(deps: AgentDeps, req: AgentRequest): Pr
     userText = req.text.trim().slice(0, MAX_MESSAGE);
     if (!userText) return { messages: [], changed: [] };
     const saved = await saveMessage(deps.db, deps.userId, 'user', userText);
-    outcome = await message(deps, ctx, userText, req.page);
+    outcome = await message(deps, ctx, userText, started, req.page);
     return finish(deps, [saved], outcome, started);
   }
   if (req.type === 'action') {
@@ -98,7 +99,7 @@ const expiry = (deps: AgentDeps) => new Date(deps.now.getTime() + CONFIRM_TTL_MS
 const reply = (text: string, path: MessageMeta['path'], extra: Partial<Outcome> = {}): Outcome =>
   ({ text, cards: [], changed: [], meta: { path }, ...extra });
 
-async function message(deps: AgentDeps, ctx: ToolCtx, text: string, page?: string): Promise<Outcome> {
+async function message(deps: AgentDeps, ctx: ToolCtx, text: string, started: number, page?: string): Promise<Outcome> {
   const context = await buildContext(ctx, page);
   const tools = toolsFor(deps.me.role);
   const pending = await latestPending(deps.db, deps.userId, deps.now);
@@ -130,7 +131,7 @@ async function message(deps: AgentDeps, ctx: ToolCtx, text: string, page?: strin
       return { ...(await action(deps, ctx, pending!.id, choices[0].id)), meta };
     }
     case 'llm':
-      return { ...(await llmTurn(deps, ctx, context, tools)), meta: { path: 'llm', confidence: r.confidence } };
+      return { ...(await llmTurn(deps, ctx, context, tools, started)), meta: { path: 'llm', confidence: r.confidence } };
   }
 }
 
@@ -145,6 +146,8 @@ async function execute(deps: AgentDeps, ctx: ToolCtx, tool: AgentTool, rawArgs: 
       const r = await tool.run(ctx, v.args);
       return { text: r.text, cards: r.cards ?? [], changed: r.changed ?? [], meta, data: r.data ?? r.text };
     }
+    // Store the month the card names, not "whichever is current when the user clicks".
+    if (tool.args.period?.slot === 'period' && v.args.period === undefined) v.args.period = (await periodArg(ctx, undefined)).id;
     const confirmation = tool.confirm ? await tool.confirm(ctx, v.args) : { title: `Run ${tool.name}?`, lines: [] };
     if (confirmation) {
       const choices = confirmation.choices ?? CONFIRM_CHOICES;
@@ -235,11 +238,12 @@ function systemPrompt(c: AgentContext): string {
   ].join('\n');
 }
 
-async function llmTurn(deps: AgentDeps, ctx: ToolCtx, context: AgentContext, tools: AgentTool[]): Promise<Outcome> {
+async function llmTurn(deps: AgentDeps, ctx: ToolCtx, context: AgentContext, tools: AgentTool[], started: number): Promise<Outcome> {
   if (!deps.llm) {
     return reply(`I can only handle simple requests right now, such as:\n${HELP[deps.me.role].map((h) => `• ${h}`).join('\n')}`, 'llm');
   }
-  const deadline = Date.now() + TURN_BUDGET_MS;
+  // The budget covers the whole turn (context, decider, LLM), so count from its start.
+  const deadline = started + TURN_BUDGET_MS;
   const turns = await recentTurns(deps.db, deps.userId, 7);
   const messages: LlmMessage[] = [{ role: 'system', content: systemPrompt(context) }, ...turns];
   const llmTools = tools.map((t) => ({ name: t.name, description: t.description, parameters: toJsonSchema(t.args) }));
@@ -247,7 +251,7 @@ async function llmTurn(deps: AgentDeps, ctx: ToolCtx, context: AgentContext, too
   const changed: string[] = [];
   try {
     for (let round = 0; round < LLM_ROUNDS && Date.now() < deadline; round++) {
-      const res = await deps.llm.complete({ messages, tools: llmTools });
+      const res = await deps.llm.complete({ messages, tools: llmTools, timeoutMs: Math.min(LLM_TIMEOUT_MS, deadline - Date.now()) });
       if (res.toolCalls.length === 0) return { text: res.text || 'Done.', cards, changed, meta: { path: 'llm' } };
       messages.push({ role: 'assistant', content: res.text, toolCalls: res.toolCalls });
       for (const call of res.toolCalls) {

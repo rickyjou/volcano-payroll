@@ -56,6 +56,15 @@ describe('employee time tools', () => {
     expect((await tool('log_time').undo!(alice(), added.undo)).text).toBe('Undone: Wed Oct 7 is back to 8h REG.');
   });
 
+  it("won't undo a day that has changed since", async () => {
+    const r = await tool('log_time').run(alice(), { day: '2026-10-08', code: 'REG', hours: 8, mode: 'set' });
+    await ok(service().update('time_entries', { hours: 6 }).eq('work_date', '2026-10-08'));
+    expect((await refusalOf(tool('log_time').undo!(alice(), r.undo))).message).toBe('Thu Oct 8 has changed since (now 6h REG), so it was not undone.');
+    const [e] = await ok<{ hours: string }>(service().from('time_entries').select('hours').eq('work_date', '2026-10-08'));
+    expect(Number(e.hours)).toBe(6);
+    await ok(service().delete('time_entries').eq('work_date', '2026-10-08'));
+  });
+
   it('refuses impossible or misplaced time', async () => {
     expect((await refusalOf(tool('log_time').confirm!(alice(), { ...day, hours: 17, mode: 'add' }))).message).toBe('Wed Oct 7 would have 25h; the most is 24h in a day.');
     expect((await refusalOf(tool('log_time').confirm!(alice(), { ...day, days: 1, mode: 'set' }))).message).toBe('How many hours? For example "8 hours".');
@@ -92,6 +101,13 @@ describe('employee time tools', () => {
     expect((await tool('recall_timesheet').run(alice(), {})).text).toBe('Recalled your October 2026 timesheet. You can edit it now.');
   });
 
+  it('refuses a submit or recall card clicked after the timesheet already moved', async () => {
+    expect((await refusalOf(tool('recall_timesheet').run(alice(), {}))).message).toBe("Your October 2026 timesheet isn't waiting for approval, so there's nothing to recall.");
+    await tool('submit_timesheet').run(alice(), {});
+    expect((await refusalOf(tool('submit_timesheet').run(alice(), {}))).message).toBe('Your October 2026 timesheet is already submitted.');
+    await tool('recall_timesheet').run(alice(), {});
+  });
+
   it('shows pay and profile', async () => {
     expect((await tool('show_my_pay').run(alice(), {})).text).toBe('There is no finalized pay for you yet.');
     expect((await tool('show_profile').run(alice(), {})).text).toBe(`alice Test (${org.alice.email}), employee. Pay: hourly, $25.00 / hour.`);
@@ -125,6 +141,11 @@ describe('approval tools', () => {
     // Approved meanwhile (another tab, or the Approvals screen): refuse instead of claiming success.
     expect((await refusalOf(tool('approve_timesheets').confirm!(manager(), { timesheets: [id] }))).message)
       .toBe("Nothing to approve: alice Test's October 2026 timesheet is approved, not waiting for approval.");
+    // A card shown before that and clicked now must not report success either.
+    expect((await refusalOf(tool('approve_timesheets').run(manager(), { timesheets: [id] }))).message)
+      .toBe("Nothing was approved. alice Test's October 2026 timesheet is approved, not waiting for approval.");
+    expect((await refusalOf(tool('return_timesheet').run(manager(), { timesheet: id, note: 'Too late' }))).message)
+      .toBe("alice Test's October 2026 timesheet is approved, not waiting for approval.");
   });
 });
 

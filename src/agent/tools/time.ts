@@ -105,11 +105,17 @@ export const logTime: AgentTool = {
       text: `Logged ${was}${amountLabel(plan.next)} ${code} for ${dayLabel(day)}. ${monthLabel(plan.period.start_date)} total: ${plan.unit === 'days' ? amountLabel({ days: total.days }) : amountLabel({ hours: total.hours })}.`,
       changed: ['timesheets'],
       data: { day, code, ...plan.next },
-      undo: { timesheet_id: sheet.id, day, code, previous: plan.existing ? { hours: plan.existing.hours, days: plan.existing.days } : null },
+      undo: { timesheet_id: sheet.id, day, code, previous: plan.existing ? { hours: plan.existing.hours, days: plan.existing.days } : null, wrote: plan.next },
     };
   },
   async undo(ctx, u) {
-    const { timesheet_id, day, code, previous } = u as { timesheet_id: string; day: string; code: string; previous: { hours: number | null; days: number | null } | null };
+    type Value = { hours: number | null; days: number | null };
+    const { timesheet_id, day, code, previous, wrote } = u as { timesheet_id: string; day: string; code: string; previous: Value | null; wrote: Value };
+    // Only undo what this action wrote: if the day was edited since, leave it alone.
+    const now = (await entriesFor(ctx.db, timesheet_id)).find((e) => e.work_date === day && e.earning_code === code);
+    if (!now || now.hours !== wrote.hours || now.days !== wrote.days) {
+      throw new Refusal(`${dayLabel(day)} has changed since (now ${now ? amountLabel(now) : 'nothing'} ${code}), so it was not undone.`);
+    }
     const q = (b: ReturnType<typeof ctx.db.update>) => b.eq('timesheet_id', timesheet_id).eq('work_date', day).eq('earning_code', code);
     if (previous) await changed(q(ctx.db.update('time_entries', previous)), 'that entry');
     else await rows(ctx.db.delete('time_entries').eq('timesheet_id', timesheet_id).eq('work_date', day).eq('earning_code', code));
@@ -222,7 +228,9 @@ export const submitTimesheet: AgentTool = {
   async run(ctx, a) {
     const s = await sheetSummary(ctx, a.period);
     if (!s.sheet) throw new Refusal('There is no timesheet to submit.');
-    await changed(ctx.db.update('timesheets', { status: 'submitted' }).eq('id', s.sheet.id), 'that timesheet');
+    // Only from draft/returned: a card clicked after the timesheet moved must not claim success.
+    const moved = await rows(ctx.db.update('timesheets', { status: 'submitted' }).eq('id', s.sheet.id).in('status', ['draft', 'rejected']));
+    if (!moved.length) throw new Refusal(`Your ${monthLabel(s.period.start_date)} timesheet is already ${(await sheetSummary(ctx, s.period.id)).sheet?.status ?? 'gone'}.`);
     return { text: `Submitted your ${monthLabel(s.period.start_date)} timesheet for approval.`, changed: ['timesheets'] };
   },
 };
@@ -240,8 +248,8 @@ export const recallTimesheet: AgentTool = {
   },
   async run(ctx, a) {
     const s = await sheetSummary(ctx, a.period);
-    if (!s.sheet) throw new Refusal('There is no timesheet to recall.');
-    await changed(ctx.db.update('timesheets', { status: 'draft' }).eq('id', s.sheet.id), 'that timesheet');
+    const moved = s.sheet ? await rows(ctx.db.update('timesheets', { status: 'draft' }).eq('id', s.sheet.id).eq('status', 'submitted')) : [];
+    if (!moved.length) throw new Refusal(`Your ${monthLabel(s.period.start_date)} timesheet isn't waiting for approval, so there's nothing to recall.`);
     return { text: `Recalled your ${monthLabel(s.period.start_date)} timesheet. You can edit it now.`, changed: ['timesheets'] };
   },
 };

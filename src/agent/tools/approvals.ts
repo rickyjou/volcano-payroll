@@ -3,7 +3,7 @@
 import { rows } from '../../server/db';
 import { HttpError } from '../../server/http';
 import {
-  changed, entriesFor, fullName, getEmployee, getPeriod, getTimesheet, listEmployees, listPeriods, pendingApprovals,
+  entriesFor, fullName, getEmployee, getPeriod, getTimesheet, listEmployees, listPeriods, pendingApprovals,
 } from '../queries';
 import { Refusal, type AgentTool, type RowAction, type ToolCtx } from '../types';
 import { amountLabel, dayLabel, monthLabel, periodArg } from './common';
@@ -26,6 +26,24 @@ async function sheetName(ctx: ToolCtx, id: string): Promise<{ name: string; mont
   const s = await getTimesheet(ctx.db, id);
   const [e, p] = await Promise.all([getEmployee(ctx.db, s.employee_id), getPeriod(ctx.db, s.pay_period_id)]);
   return { name: fullName(e), month: monthLabel(p.start_date), status: s.status };
+}
+
+const notWaiting = (n: { name: string; month: string; status: string }) => `${n.name}'s ${n.month} timesheet is ${n.status}, not waiting for approval`;
+
+/** The statuses a timesheet may be approved from: submitted, or (admins) a leaver's unsubmitted one. */
+const approvableFrom = (leaver: boolean) => (leaver ? ['submitted', 'draft', 'rejected'] : ['submitted']);
+
+/**
+ * Moves a timesheet only if it is still in one of `from` (the card may be stale: another tab
+ * or the Approvals screen can have acted since). Refuses with its current status otherwise.
+ */
+async function moveSheet(ctx: ToolCtx, id: string, from: string[], patch: { status: string; rejection_note?: string }): Promise<void> {
+  const who = await sheetName(ctx, id);
+  if (from.includes(who.status)) {
+    const moved = await rows(ctx.db.update('timesheets', patch).eq('id', id).in('status', from));
+    if (moved.length) return;
+  }
+  throw new Refusal(notWaiting(await sheetName(ctx, id)));
 }
 
 /** The timesheets (of those given) whose employee has left. */
@@ -113,7 +131,7 @@ export const approveTimesheets: AgentTool = {
     const names = await Promise.all(ids.map((id) => sheetName(ctx, id)));
     // Only submitted timesheets (or, for admins, a leaver's unsubmitted one) can be approved.
     const leaving = ctx.me.role === 'admin' ? await leaverSheets(ctx, ids) : new Set<string>();
-    const stale = names.filter((n, i) => n.status !== 'submitted' && !(leaving.has(ids[i]) && ['draft', 'rejected'].includes(n.status)));
+    const stale = names.filter((n, i) => !approvableFrom(leaving.has(ids[i])).includes(n.status));
     if (stale.length) {
       throw new Refusal(`Nothing to approve: ${stale.map((n) => `${n.name}'s ${n.month} timesheet is ${n.status}`).join('; ')}, not waiting for approval.`);
     }
@@ -124,18 +142,20 @@ export const approveTimesheets: AgentTool = {
     };
   },
   async run(ctx, a) {
+    const ids = a.timesheets as string[];
+    const leaving = ctx.me.role === 'admin' ? await leaverSheets(ctx, ids) : new Set<string>();
     const done: string[] = [];
     const failed: string[] = [];
-    for (const id of a.timesheets as string[]) {
+    for (const id of ids) {
       const who = await sheetName(ctx, id).catch(() => ({ name: 'A timesheet', month: '', status: '' }));
       try {
-        await changed(ctx.db.update('timesheets', { status: 'approved' }).eq('id', id), `${who.name}'s timesheet`);
+        await moveSheet(ctx, id, approvableFrom(leaving.has(id)), { status: 'approved' });
         done.push(`${who.name} (${who.month})`);
       } catch (err) {
-        failed.push(`${who.name}: ${err instanceof HttpError ? err.message : 'could not be approved'}`);
+        failed.push(err instanceof Refusal ? err.message : `${who.name}: ${err instanceof HttpError ? err.message : 'could not be approved'}`);
       }
     }
-    if (done.length === 0) throw new Refusal(`Nothing was approved. ${failed.join('; ')}`);
+    if (done.length === 0) throw new Refusal(`Nothing was approved. ${failed.join('; ')}.`);
     return {
       text: `Approved ${done.join(', ')}.${failed.length ? ` Not approved: ${failed.join('; ')}.` : ''}`,
       changed: ['timesheets'],
@@ -155,12 +175,14 @@ export const returnTimesheet: AgentTool = {
   },
   async confirm(ctx, a) {
     const who = await sheetName(ctx, a.timesheet as string);
-    if (who.status !== 'submitted') throw new Refusal(`${who.name}'s ${who.month} timesheet is ${who.status}, not waiting for approval.`);
+    if (who.status !== 'submitted') throw new Refusal(`${notWaiting(who)}.`);
     return { title: `Return ${who.name}'s ${who.month} timesheet?`, lines: [`Note: "${a.note}"`], choices: [{ id: 'confirm', label: 'Return', style: 'primary' }, { id: 'cancel', label: 'Cancel', style: 'secondary' }] };
   },
   async run(ctx, a) {
     const who = await sheetName(ctx, a.timesheet as string);
-    await changed(ctx.db.update('timesheets', { status: 'rejected', rejection_note: a.note as string }).eq('id', a.timesheet as string), `${who.name}'s timesheet`);
+    await moveSheet(ctx, a.timesheet as string, ['submitted'], { status: 'rejected', rejection_note: a.note as string }).catch((err) => {
+      throw err instanceof Refusal ? new Refusal(`${err.message}.`) : err;
+    });
     return { text: `Returned ${who.name}'s ${who.month} timesheet with your note.`, changed: ['timesheets'] };
   },
 };

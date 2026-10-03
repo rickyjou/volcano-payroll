@@ -232,6 +232,28 @@ describe('limits', () => {
     expect(last(r).content).toBe("I couldn't finish that. Please try rephrasing or breaking it into smaller steps.");
     expect(llm.calls).toBe(4);
   });
+  it('gives each LLM call only what is left of the turn', async () => {
+    const seen: (number | undefined)[] = [];
+    const llm: Llm = {
+      async complete(req) {
+        seen.push(req.timeoutMs);
+        return { text: '', toolCalls: [{ id: 'c', name: 'show_profile', args: {} }] };
+      },
+    };
+    await say(deps(org.bob, 'employee', null, llm), 'tell me about me, again and again');
+    expect(seen).toHaveLength(4);
+    for (const t of seen) {
+      expect(t).toBeGreaterThan(0);
+      expect(t).toBeLessThanOrEqual(20_000);
+    }
+  });
+  it('stores the month a card names, so a later click acts on that month', async () => {
+    const admin = deps(org.admin, 'admin', null);
+    const c = card(await send(admin, { type: 'tool', tool: 'reopen_period', args: {} }), 'confirm')!;
+    const [row] = await ok<{ args: unknown }>(service().from('agent_actions').select('args').eq('id', c.actionId));
+    expect(typeof row.args === 'string' ? JSON.parse(row.args) : row.args).toEqual({ period: october });
+    await send(admin, { type: 'action', actionId: c.actionId, choice: 'cancel' });
+  });
   it('runs a confirmation clicked in two tabs at once exactly once', async () => {
     const c = card(await send(deps(org.admin, 'admin', null), { type: 'tool', tool: 'open_period', args: { month: '2026-12' } }), 'confirm')!;
     const both = await Promise.all([1, 2].map(() => send(deps(org.admin, 'admin', null), { type: 'action', actionId: c.actionId, choice: 'confirm' })));

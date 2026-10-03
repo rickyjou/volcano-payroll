@@ -88,3 +88,31 @@ describe('codes, additions and formats', () => {
     expect(parseFormat('export the run')).toBeNull();
   });
 });
+
+describe('phrasings the parsers must not guess (they would become instant writes)', () => {
+  it.each([
+    'log 20 minutes for today',
+    'log 8h 30m today',
+    'I worked 9 to 5 today',
+    'worked 9-5 today',
+    'worked 9am-5pm on friday',
+    'log 8 hours yesterday and 6 today',
+  ])('reads no amount from "%s"', (text) => {
+    expect(parseAmount(text)).toBeNull();
+  });
+  it.each([
+    'log PTO next friday, full day',
+    'log 8 hours yesterday and 6 today',
+    'full day on monday and tuesday',
+  ])('reads no day from "%s"', (text) => {
+    expect(parseDay(text, TODAY)).toBeNull();
+  });
+  it('reads "the day before yesterday" as two days back', () => {
+    expect(parseDay('8h the day before yesterday', TODAY)).toBe('2026-10-05');
+  });
+  it('does not add when the user says not to', () => {
+    expect(isAdditive('log 8 hours for today, not more')).toBe(false);
+    expect(isAdditive('no extra hours, just 8 for today')).toBe(false);
+    expect(isAdditive('add 2 more hours')).toBe(true);
+  });
+});

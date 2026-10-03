@@ -1,16 +1,14 @@
 // Measures a decider on the labelled cases and picks the confidence threshold.
 //   npm run eval:decider -- [--url http://127.0.0.1:8000] [--threshold 0.9]
 // The router is pure, so each case is asked once and then replayed at several thresholds.
-// Exit code 1 when any write intent is wrong at or above the chosen threshold.
+// Exit code 1 when any write error (see eval-judge.ts) happens at the chosen threshold.
 import { readFileSync } from 'node:fs';
 import { describeContext } from '../src/agent/context';
 import { HttpDecider, type DeciderAnswer } from '../src/agent/decider';
-import { deciderQuestions, deciderState, route, type Route } from '../src/agent/router';
-import { toolByName, toolsFor } from '../src/agent/tools';
-import type { Role } from '../src/agent/types';
+import { deciderQuestions, deciderState, route } from '../src/agent/router';
+import { toolsFor } from '../src/agent/tools';
 import { fixtureContext } from '../tests/agent/fixture';
-
-interface Case { role: Role; text: string; intent: string; args?: Record<string, unknown> }
+import { judge, type Case } from './eval-judge';
 
 const flag = (name: string) => {
   const i = process.argv.indexOf(`--${name}`);
@@ -21,17 +19,6 @@ const chosen = Number(flag('threshold') ?? process.env.AGENT_DECIDER_THRESHOLD ?
 const THRESHOLDS = [0.7, 0.8, 0.85, 0.9, 0.93, 0.95, 0.97, 0.99];
 
 const cases: Case[] = readFileSync('tests/agent/decider-cases.jsonl', 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l));
-const isWrite = (intent: string) => intent === 'confirm' || toolByName(intent)?.kind === 'write';
-
-/** What the route did, judged against the label. */
-function judge(c: Case, r: Route): 'correct' | 'wrong' | 'llm' {
-  if (r.kind === 'llm') return 'llm';
-  if (r.kind === 'ask') return r.card.kind === 'choices' && r.card.options[0]?.request.tool === c.intent ? 'correct' : 'wrong';
-  if (r.kind !== 'tool') return r.kind === c.intent ? 'correct' : 'wrong';
-  if (r.tool.name !== c.intent) return 'wrong';
-  for (const [k, v] of Object.entries(c.args ?? {})) if (JSON.stringify(r.args[k]) !== JSON.stringify(v)) return 'wrong';
-  return 'correct';
-}
 
 async function main() {
   const decider = new HttpDecider({ url, timeoutMs: 30_000 });
@@ -45,7 +32,7 @@ async function main() {
   }
   const replay = (T: number) => asked.map(({ c, answers }) => {
     const ctx = fixtureContext(c.role);
-    return { c, verdict: judge(c, route({ text: c.text, context: ctx, tools: toolsFor(c.role), answers, threshold: T, hasPending: c.intent === 'confirm' || c.intent === 'cancel' })) };
+    return { c, ...judge(c, route({ text: c.text, context: ctx, tools: toolsFor(c.role), answers, threshold: T, hasPending: c.intent === 'confirm' || c.intent === 'cancel' })) };
   });
 
   const top = asked.filter(({ c, answers }) => answers.intent?.type === 'choice' && answers.intent.choice === c.intent).length;
@@ -57,28 +44,29 @@ async function main() {
     const r = replay(T);
     const handled = r.filter((x) => x.verdict !== 'llm');
     const wrong = r.filter((x) => x.verdict === 'wrong');
-    const wrongWrites = wrong.filter((x) => isWrite(x.c.intent));
+    const wrongWrites = wrong.filter((x) => x.writeError);
     if (suggested === null && wrongWrites.length === 0) suggested = T;
     console.log(`${T.toFixed(2).padStart(9)}  ${(handled.length / r.length * 100).toFixed(1).padStart(7)}%  ${String(handled.length - wrong.length).padStart(7)}  ${String(wrong.length).padStart(5)}  ${String(wrongWrites.length).padStart(12)}`);
   }
 
   const atChosen = replay(chosen);
-  const byIntent = new Map<string, { n: number; correct: number; llm: number; wrong: number }>();
-  for (const { c, verdict } of atChosen) {
-    const s = byIntent.get(c.intent) ?? { n: 0, correct: 0, llm: 0, wrong: 0 };
+  const byIntent = new Map<string, { n: number; correct: number; llm: number; wrong: number; writeErrors: number }>();
+  for (const { c, verdict, writeError } of atChosen) {
+    const s = byIntent.get(c.intent) ?? { n: 0, correct: 0, llm: 0, wrong: 0, writeErrors: 0 };
     s.n += 1;
     s[verdict] += 1;
+    if (writeError) s.writeErrors += 1;
     byIntent.set(c.intent, s);
   }
   console.log(`\nPer intent at threshold ${chosen}:`);
-  for (const [intent, s] of [...byIntent].sort()) console.log(`  ${intent.padEnd(26)} n=${s.n} correct=${s.correct} llm=${s.llm} wrong=${s.wrong}${s.wrong && isWrite(intent) ? '  <-- WRITE ERROR' : ''}`);
+  for (const [intent, s] of [...byIntent].sort()) console.log(`  ${intent.padEnd(26)} n=${s.n} correct=${s.correct} llm=${s.llm} wrong=${s.wrong}${s.writeErrors ? '  <-- WRITE ERROR' : ''}`);
   const errors = atChosen.filter((x) => x.verdict === 'wrong');
   if (errors.length) {
     console.log('\nWrong at the chosen threshold:');
-    for (const { c } of errors) console.log(`  [${c.role}] "${c.text}" expected ${c.intent}`);
+    for (const { c, writeError } of errors) console.log(`  [${c.role}] "${c.text}" expected ${c.intent}${writeError ? '  (write error)' : ''}`);
   }
   console.log(`\nLowest threshold with no wrong writes: ${suggested ?? 'none of those tried'}`);
-  if (errors.some((x) => isWrite(x.c.intent))) process.exit(1);
+  if (errors.some((x) => x.writeError)) process.exit(1);
 }
 
 main().catch((err) => {
