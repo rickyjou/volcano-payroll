@@ -111,10 +111,19 @@ function validateRecords(records) {
       work_state: state,
       pay_type: payType,
       rate_cents: rate,
-      effective_from: payType ? eff ?? hire : null
+      effective_from: payType ? eff ?? hire : null,
+      blank: ["role", "external_id", "work_state"].filter((c) => !get(c))
     });
   }
   return { rows: rows2, errors };
+}
+function employeeFields(row, mode) {
+  const fields = { email: row.email, first_name: row.first_name, last_name: row.last_name, hire_date: row.hire_date };
+  const optional = { role: row.role, external_id: row.external_id, work_state: row.work_state };
+  for (const [k, v] of Object.entries(optional)) {
+    if (mode === "insert" || !row.blank.includes(k)) fields[k] = v;
+  }
+  return fields;
 }
 
 // src/lib/db-errors.ts
@@ -5164,16 +5173,8 @@ var handler = handle(async (event) => {
   const outcomes = [];
   const idByEmail = new Map(existing);
   for (const r of input) {
-    const fields = {
-      email: r.email,
-      first_name: r.first_name,
-      last_name: r.last_name,
-      external_id: r.external_id,
-      role: r.role,
-      hire_date: r.hire_date,
-      work_state: r.work_state
-    };
     const id = existing.get(r.email);
+    const fields = employeeFields(r, id ? "update" : "insert");
     if (dryRun) {
       outcomes.push({ line: r.line, email: r.email, result: id ? "updated" : "created" });
       continue;

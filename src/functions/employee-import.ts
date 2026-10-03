@@ -1,6 +1,6 @@
 // Admin-only bulk create/update of employees (and optional compensation) from
 // rows already parsed and validated in the browser by parseEmployeeCsv.
-import { validateRecords, type ImportRecord, type ImportRow } from '../lib/employee-import';
+import { employeeFields, validateRecords, type ImportRecord, type ImportRow } from '../lib/employee-import';
 import { requireEmployee } from '../server/auth';
 import { rows } from '../server/db';
 import { HttpError, authOf, handle } from '../server/http';
@@ -37,11 +37,8 @@ export const handler = handle(async (event) => {
   const outcomes: Outcome[] = [];
   const idByEmail = new Map(existing);
   for (const r of input) {
-    const fields = {
-      email: r.email, first_name: r.first_name, last_name: r.last_name, external_id: r.external_id,
-      role: r.role, hire_date: r.hire_date, work_state: r.work_state,
-    };
     const id = existing.get(r.email);
+    const fields = employeeFields(r, id ? 'update' : 'insert');
     if (dryRun) {
       outcomes.push({ line: r.line, email: r.email, result: id ? 'updated' : 'created' });
       continue;

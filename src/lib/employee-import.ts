@@ -27,6 +27,8 @@ export interface ImportRow {
   /** salary: annual; hourly: per hour; daily: per day */
   rate_cents: number | null;
   effective_from: ISODate | null;
+  /** Optional columns left blank (or missing): updates keep the stored value. */
+  blank: ('role' | 'external_id' | 'work_state')[];
 }
 
 export interface ImportError { line: number; message: string }
@@ -108,9 +110,20 @@ export function validateRecords(records: ImportRecord[]): { rows: ImportRow[]; e
       line, email, first_name: get('first_name'), last_name: get('last_name'),
       external_id: opt('external_id'), role, manager_email: manager, hire_date: hire, work_state: state,
       pay_type: payType, rate_cents: rate, effective_from: payType ? (eff ?? hire) : null,
+      blank: (['role', 'external_id', 'work_state'] as const).filter((c) => !get(c)),
     });
   }
   return { rows, errors };
+}
+
+/** Employee columns to write: inserts get every field, updates skip optional cells left blank. */
+export function employeeFields(row: ImportRow, mode: 'insert' | 'update'): Record<string, string | null> {
+  const fields: Record<string, string | null> = { email: row.email, first_name: row.first_name, last_name: row.last_name, hire_date: row.hire_date };
+  const optional = { role: row.role, external_id: row.external_id, work_state: row.work_state };
+  for (const [k, v] of Object.entries(optional)) {
+    if (mode === 'insert' || !row.blank.includes(k as ImportRow['blank'][number])) fields[k] = v;
+  }
+  return fields;
 }
 
 /** Parses and validates an employee CSV. Rows with any error are left out of `rows`. */

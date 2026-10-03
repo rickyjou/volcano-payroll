@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseEmployeeCsv } from '../../src/lib/employee-import';
+import { employeeFields, parseEmployeeCsv } from '../../src/lib/employee-import';
 
 const HEADER = 'email,first_name,last_name,external_id,role,manager_email,hire_date,work_state,pay_type,rate,effective_from';
 
@@ -10,7 +10,7 @@ describe('parseEmployeeCsv', () => {
     expect(r.rows).toEqual([{
       line: 2, email: 'ada@example.com', first_name: 'Ada', last_name: 'Lovelace', external_id: 'E1',
       role: 'manager', manager_email: 'boss@x.com', hire_date: '2024-01-15', work_state: 'CA',
-      pay_type: 'hourly', rate_cents: 102_550, effective_from: '2024-01-15',
+      pay_type: 'hourly', rate_cents: 102_550, effective_from: '2024-01-15', blank: [],
     }]);
   });
 
@@ -48,5 +48,22 @@ describe('parseEmployeeCsv', () => {
     expect(parseEmployeeCsv('email,first_name\nx@y.z,X').errors).toEqual([{ line: 1, message: 'Missing required column(s): last_name, hire_date' }]);
     expect(parseEmployeeCsv('email,first_name,last_name,hire_date,salary\n').errors).toEqual([{ line: 1, message: 'Unknown column(s): salary' }]);
     expect(parseEmployeeCsv('').errors).toEqual([{ line: 0, message: 'The file is empty' }]);
+  });
+});
+
+describe('employeeFields', () => {
+  it('leaves blank role, external_id and work_state out of updates so a partial re-import keeps them', () => {
+    const [row] = parseEmployeeCsv('email,first_name,last_name,hire_date\nmia@x.com,Mia,Renamed,2026-01-01').rows;
+    expect(employeeFields(row, 'update')).toEqual({ email: 'mia@x.com', first_name: 'Mia', last_name: 'Renamed', hire_date: '2026-01-01' });
+  });
+  it('writes every field on insert, defaulting the role', () => {
+    const [row] = parseEmployeeCsv('email,first_name,last_name,hire_date\nnew@x.com,New,Person,2026-01-01').rows;
+    expect(employeeFields(row, 'insert')).toEqual({
+      email: 'new@x.com', first_name: 'New', last_name: 'Person', hire_date: '2026-01-01', role: 'employee', external_id: null, work_state: null,
+    });
+  });
+  it('updates role, external_id and work_state when the cells are filled', () => {
+    const [row] = parseEmployeeCsv('email,first_name,last_name,hire_date,role,external_id,work_state\nmia@x.com,Mia,M,2026-01-01,manager,E1,ny').rows;
+    expect(employeeFields(row, 'update')).toMatchObject({ role: 'manager', external_id: 'E1', work_state: 'NY' });
   });
 });
