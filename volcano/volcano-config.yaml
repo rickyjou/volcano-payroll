@@ -1,0 +1,21 @@
+version: 1
+
+auth:
+  signup:
+    # Accounts only matter once an admin has invited the email; guests are never needed.
+    enable_anonymous_signins: false
+
+# Every function checks the caller itself; none is callable without a signed-in user.
+functions:
+  - name: employee-link
+    public: false
+  - name: employee-import
+    public: false
+  - name: payroll-run
+    public: false
+  - name: payroll-export
+    public: false
+  - name: webhook-dispatch
+    public: false
+  - name: api-key-create
+    public: false
