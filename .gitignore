@@ -1,0 +1,8 @@
+node_modules/
+.next/
+web/.next/
+web/next-env.d.ts
+web/.env.local
+*.tsbuildinfo
+.vitest/
+.DS_Store

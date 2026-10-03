@@ -1,0 +1,33 @@
+{
+  "name": "payroll",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev web",
+    "build": "next build web",
+    "start": "next start web",
+    "test": "vitest run",
+    "test:tz": "TZ=Pacific/Kiritimati vitest run && TZ=America/Los_Angeles vitest run",
+    "test:integration": "vitest run --config vitest.integration.config.ts",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p web",
+    "build:functions": "esbuild src/functions/*.ts --bundle --platform=node --target=node22 --format=cjs --outdir=volcano/functions --log-level=warning",
+    "db:generate": "tsx scripts/gen-migrations.ts",
+    "db:migrate": "npm run db:generate && volcano migrations deploy --all -d payroll",
+    "bootstrap-admin": "tsx --env-file=volcano/volcano.env scripts/bootstrap-admin.ts"
+  },
+  "dependencies": {
+    "@volcano.dev/sdk": "^1.15.1",
+    "next": "^16.3.8",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.4",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "esbuild": "^0.28.2",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.3"
+  }
+}
