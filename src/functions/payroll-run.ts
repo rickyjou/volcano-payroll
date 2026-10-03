@@ -28,6 +28,8 @@ export const handler = handle(async (event) => {
     const period = await loadPeriod(db, requireString(event.period_id, 'period_id'));
     if (period.status !== 'locked') throw new HttpError(409, 'PERIOD_NOT_LOCKED', 'Lock the pay period before generating a run');
     const skipped = Array.isArray(event.skipped_employee_ids) ? event.skipped_employee_ids.map(String) : [];
+    // Read before the data, so a change made while we calculate makes the draft stale.
+    const { version } = await one<{ version: number }>(db.from('payroll_inputs').select('version'), 'Payroll inputs version not found');
     const result = calculateRun(await loadCalcInput(db, period, skipped));
 
     await rows(db.delete('payroll_runs').eq('pay_period_id', period.id).eq('status', 'draft'));
@@ -37,6 +39,7 @@ export const handler = handle(async (event) => {
       warnings: asJson(result.warnings),
       skipped_employee_ids: asJson(skipped),
       lines_input: asJson(result.lines),
+      inputs_version: version,
     }));
     return { run_id: run.id, totals: result.totals, warnings: result.warnings, line_count: result.lines.length };
   }

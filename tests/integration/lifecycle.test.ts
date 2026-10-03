@@ -83,6 +83,25 @@ describe('payroll run lifecycle', () => {
     await ok(org.admin.client.insert('compensation', { employee_id: org.alice.employeeId, pay_type: 'hourly', rate_cents: 2600, effective_from: '2026-12-01' }));
     expect(await errorOf(org.admin.client.update('payroll_runs', { status: 'finalized' }).eq('id', runId))).toContain('CONFLICT:RUN_STALE');
   });
+  it('refuses to finalize after compensation is corrected in place', async () => {
+    await ok(org.admin.client.delete('payroll_runs').eq('id', runId));
+    [{ id: runId }] = await ok<{ id: string }>(org.admin.client.insert('payroll_runs', { pay_period_id: periodId, lines_input: lines() }));
+    await ok(org.admin.client.update('compensation', { rate_cents: 2700 }).eq('employee_id', org.alice.employeeId).eq('effective_from', '2026-12-01'));
+    expect(await errorOf(org.admin.client.update('payroll_runs', { status: 'finalized' }).eq('id', runId))).toContain('CONFLICT:RUN_STALE');
+  });
+  it('refuses to finalize after an input row is deleted', async () => {
+    await ok(org.admin.client.delete('payroll_runs').eq('id', runId));
+    [{ id: runId }] = await ok<{ id: string }>(org.admin.client.insert('payroll_runs', { pay_period_id: periodId, lines_input: lines() }));
+    await ok(org.admin.client.delete('compensation').eq('employee_id', org.alice.employeeId).eq('effective_from', '2026-12-01'));
+    expect(await errorOf(org.admin.client.update('payroll_runs', { status: 'finalized' }).eq('id', runId))).toContain('CONFLICT:RUN_STALE');
+  });
+  it('refuses to finalize when data changed while the draft was being calculated', async () => {
+    await ok(org.admin.client.delete('payroll_runs').eq('id', runId));
+    const [{ version }] = await ok<{ version: number }>(org.admin.client.from('payroll_inputs').select('version'));
+    await ok(org.admin.client.insert('compensation', { employee_id: org.alice.employeeId, pay_type: 'hourly', rate_cents: 2600, effective_from: '2026-12-01' }));
+    [{ id: runId }] = await ok<{ id: string }>(org.admin.client.insert('payroll_runs', { pay_period_id: periodId, lines_input: lines(), inputs_version: version }));
+    expect(await errorOf(org.admin.client.update('payroll_runs', { status: 'finalized' }).eq('id', runId))).toContain('CONFLICT:RUN_STALE');
+  });
   it('finalizes: freezes the run, finalizes the period, shows lines to the employee and queues webhooks', async () => {
     await ok(org.admin.client.insert('webhook_endpoints', { url: 'https://example.com/hook', secret: `whsec_${'x'.repeat(40)}` }));
     await ok(org.admin.client.delete('payroll_runs').eq('id', runId));

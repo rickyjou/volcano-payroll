@@ -1,0 +1,4 @@
+CREATE TABLE IF NOT EXISTS payroll_inputs (
+    id BOOLEAN PRIMARY KEY DEFAULT true CHECK (id),
+    version BIGINT NOT NULL DEFAULT 0
+);
