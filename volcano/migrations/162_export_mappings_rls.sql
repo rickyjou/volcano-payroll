@@ -1,0 +1,1 @@
+ALTER TABLE export_mappings ENABLE ROW LEVEL SECURITY;

@@ -1,0 +1,1 @@
+ALTER TABLE webhook_endpoints ENABLE ROW LEVEL SECURITY;

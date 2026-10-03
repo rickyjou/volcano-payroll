@@ -1,0 +1,1 @@
+INSERT INTO settings (id) VALUES (TRUE) ON CONFLICT (id) DO NOTHING;
