@@ -105,7 +105,7 @@ its own login and active project and the global `volcano login` stays as it is. 
 ```sh
 npm run cloud -- login                            # browser login to the payroll account
 npm run cloud -- use 1dc794d1-99e0-4c56-af27-e10b6842f924
-npm run cloud -- cloud databases create payroll   # first time only
+npm run cloud -- cloud databases create payroll --region us-east-1 --pg-version 16   # first time only
 npm run db:generate
 npm run cloud -- cloud databases migration up --all -d payroll
 npm run build:functions
@@ -113,9 +113,12 @@ cp volcano/cloud.env.example volcano/cloud.env    # then fill in the keys (gitig
 npm run cloud -- cloud variables deploy --file volcano/cloud.env
 npm run cloud -- cloud functions deploy --all
 npm run cloud -- cloud config deploy
-npm run cloud -- cloud frontends deploy --name payroll --path . --variable-scope scoped \
-  --variable NEXT_PUBLIC_VOLCANO_API_URL --variable NEXT_PUBLIC_VOLCANO_ANON_KEY \
-  --variable NEXT_PUBLIC_VOLCANO_DATABASE --variable VOLCANO_SERVICE_KEY
+# Deploy the frontend from a clean export of committed files, so nothing gitignored
+# (the .volcano-cloud login, volcano/cloud.env) can be uploaded. web/ is an npm workspace.
+rm -rf /tmp/payroll-src && mkdir /tmp/payroll-src && git archive HEAD | tar -x -C /tmp/payroll-src
+npm run cloud -- cloud frontends deploy --name payroll --path /tmp/payroll-src --app-root web \
+  --variable-scope scoped --variable NEXT_PUBLIC_VOLCANO_API_URL --variable NEXT_PUBLIC_VOLCANO_ANON_KEY \
+  --variable NEXT_PUBLIC_VOLCANO_DATABASE --variable VOLCANO_API_URL --variable VOLCANO_DATABASE --variable VOLCANO_SERVICE_KEY
 ```
 
 Cloud variables:
@@ -127,7 +130,9 @@ Cloud variables:
 | `VOLCANO_SERVICE_KEY` | `npm run cloud -- projects keys service list` (secret; server-only) |
 | `VOLCANO_DATABASE`, `NEXT_PUBLIC_VOLCANO_DATABASE` | `payroll` |
 
+The `/api/v1` route reads `VOLCANO_API_URL`, `VOLCANO_DATABASE` and `VOLCANO_SERVICE_KEY` at runtime; `NEXT_PUBLIC_*` values only exist at build time, so the frontend needs both sets.
+
 Never set `PAYROLL_ALLOW_UNCONFIRMED_EMAIL` in the cloud. Turn on email confirmation for the project
 (`require_email_confirmation` plus SMTP settings) so a person can't sign up with a colleague's invited
 email before confirming it. Then create the first admin with
-`VOLCANO_API_URL=https://api.volcano.dev VOLCANO_SERVICE_KEY=... VOLCANO_DATABASE=payroll npx tsx scripts/bootstrap-admin.ts you@company.com Your Name`.
+`npx tsx --env-file=volcano/cloud.env scripts/bootstrap-admin.ts you@company.com Your Name` (reads the keys from `volcano/cloud.env`).
