@@ -157,3 +157,41 @@ describe('admin payroll tools', () => {
     expect((await tool('discard_draft').run(admin(), { run: (again.data as { run: string }).run })).text).toBe('Discarded the October 2026 draft.');
   });
 });
+
+describe('admin people and settings tools', () => {
+  const admin = () => ctxOf(org.admin, 'admin');
+
+  it('adds, finds, updates, pays and terminates an employee', async () => {
+    const added = await tool('add_employee').run(admin(), { email: 'sam@example.com', first_name: 'Sam', last_name: 'Lee', hire_date: '2026-10-12', pay_type: 'hourly', rate: 28 });
+    expect(added.text).toBe('Added Sam Lee. They can now create an account with sam@example.com.');
+    const found = await tool('find_employee').run(admin(), { query: 'sam' });
+    expect(found.text).toBe('1 match.');
+    const sam = (found.data as { employee: string }[])[0].employee;
+    expect(await tool('update_employee').confirm!(admin(), { employee: sam, role: 'manager' })).toMatchObject({ lines: ['role: employee → manager'] });
+    expect((await tool('update_employee').run(admin(), { employee: sam, role: 'manager' })).text).toBe('Updated Sam Lee.');
+    expect((await tool('set_pay').run(admin(), { employee: sam, pay_type: 'hourly', rate: 30, effective_from: '2026-11-01' })).text).toBe("Sam Lee's pay is hourly, $30.00 per hour from Sun Nov 1.");
+    expect((await tool('terminate_employee').run(admin(), { employee: sam, date: '2026-10-31' })).text).toBe('Sam Lee is recorded as having left on Sat Oct 31.');
+    expect((await refusalOf(tool('terminate_employee').confirm!(admin(), { employee: sam, date: '2026-10-31' }))).message).toBe('Sam Lee has already left (2026-10-31).');
+  });
+
+  it('changes and shows settings', async () => {
+    expect((await tool('update_settings').run(admin(), { ot_daily_threshold: 8 })).text).toBe('Settings updated: ot_daily_threshold = 8.');
+    expect((await tool('show_settings').run(admin(), {})).text).toMatch(/^My Company: weekly OT after 40h, daily OT after 8h, double time off\./);
+  });
+
+  it('creates and revokes API keys and webhooks, showing secrets once', async () => {
+    const key = await tool('create_api_key').run(admin(), { name: 'connector' });
+    expect(cardOf(key.cards, 'secret').value).toMatch(/^pk_[0-9a-f]{8}_/);
+    const [{ id }] = await ok<{ id: string }>(service().from('api_keys').select('id').eq('name', 'connector'));
+    expect((await tool('revoke_api_key').run(admin(), { key: id })).text).toBe('API key revoked.');
+    expect((await refusalOf(tool('revoke_api_key').confirm!(admin(), { key: id }))).message).toBe('"connector" is already revoked.');
+    const hook = await tool('add_webhook').run(admin(), { url: 'https://example.com/hook' });
+    expect(cardOf(hook.cards, 'secret').value).toMatch(/^whsec_/);
+    expect((await refusalOf(tool('add_webhook').confirm!(admin(), { url: 'http://example.com' }))).message).toBe('Webhook URLs must start with https://.');
+  });
+
+  it('links to screens chat does not cover', async () => {
+    const r = await tool('open_page').run(admin(), { page: 'import_employees' });
+    expect(cardOf(r.cards, 'link')).toEqual({ kind: 'link', label: 'Import employees from CSV', href: '/admin/employees/import' });
+  });
+});
