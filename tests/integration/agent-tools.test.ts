@@ -127,3 +127,33 @@ describe('approval tools', () => {
       .toBe("Nothing to approve: alice Test's October 2026 timesheet is approved, not waiting for approval.");
   });
 });
+
+describe('admin payroll tools', () => {
+  const admin = () => ctxOf(org.admin, 'admin');
+  let runId: string;
+
+  it('opens and locks months', async () => {
+    expect(await tool('open_period').confirm!(admin(), { month: '2026-11' })).toMatchObject({ title: 'Open November 2026 for time entry?' });
+    expect((await tool('open_period').run(admin(), { month: '2026-11' })).text).toBe('November 2026 is open for time entry.');
+    expect((await tool('lock_period').run(admin(), { period: october })).text).toBe('October 2026 is locked.');
+  });
+
+  it('generates only for locked months, then explains, finalizes, exports and voids', async () => {
+    const [{ id: november }] = await ok<{ id: string }>(service().from('pay_periods').select('id').eq('start_date', '2026-11-01'));
+    expect((await refusalOf(tool('generate_run').confirm!(admin(), { period: november }))).message).toBe('November 2026 is open. Lock it before generating a run.');
+    await ok(service().delete('timesheets').eq('employee_id', org.bob.employeeId));
+    const leaveOut = [org.admin.employeeId, org.manager.employeeId, org.bob.employeeId];
+    const gen = await tool('generate_run').run(admin(), { period: october, leave_out: leaveOut });
+    expect(gen.text).toBe('Draft run for October 2026: $200.00 gross for 1 employee. Ready to finalize.');
+    runId = (gen.data as { run: string }).run;
+    expect((await tool('explain_run').run(admin(), { run: runId })).text).toBe('October 2026 run (draft): $200.00 gross for 1 employee, 0 warning(s).');
+    expect((await tool('finalize_run').run(admin(), { run: runId })).text).toBe('The October 2026 run is finalized. You can export it now.');
+    const exp = await tool('export_run').run(admin(), { run: runId, format: 'gusto' });
+    const file = cardOf(exp.cards, 'download');
+    expect(file.filename).toBe('payroll-2026-10-gusto.csv');
+    expect(file.body.split('\r\n')[1]).toBe(`Test,alice,${org.alice.email},8.00,,,,,`);
+    expect((await tool('void_run').run(admin(), { run: runId, reason: 'Wrong rate' })).text).toBe('The October 2026 run is voided and the month is locked again.');
+    const again = await tool('generate_run').run(admin(), { period: october, leave_out: leaveOut });
+    expect((await tool('discard_draft').run(admin(), { run: (again.data as { run: string }).run })).text).toBe('Discarded the October 2026 draft.');
+  });
+});

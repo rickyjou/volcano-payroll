@@ -2,9 +2,10 @@
 // Functions' own checks remain the real security boundary.
 import type { AgentTool, Role } from '../types';
 import { APPROVAL_TOOLS } from './approvals';
+import { PAYROLL_TOOLS } from './payroll';
 import { TIME_TOOLS } from './time';
 
-export const ALL_TOOLS: AgentTool[] = [...TIME_TOOLS, ...APPROVAL_TOOLS];
+export const ALL_TOOLS: AgentTool[] = [...TIME_TOOLS, ...APPROVAL_TOOLS, ...PAYROLL_TOOLS];
 
 export const toolsFor = (role: Role): AgentTool[] => ALL_TOOLS.filter((t) => t.roles.includes(role));
 
