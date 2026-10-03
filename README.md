@@ -165,7 +165,7 @@ npm run cloud -- cloud config deploy
 rm -rf /tmp/payroll-src && mkdir /tmp/payroll-src && git archive HEAD | tar -x -C /tmp/payroll-src
 npm run cloud -- cloud frontends deploy --name payroll --path /tmp/payroll-src --app-root web \
   --variable-scope scoped --variable NEXT_PUBLIC_VOLCANO_API_URL --variable NEXT_PUBLIC_VOLCANO_ANON_KEY \
-  --variable NEXT_PUBLIC_VOLCANO_DATABASE --variable VOLCANO_API_URL --variable VOLCANO_DATABASE --variable VOLCANO_SERVICE_KEY \
+  --variable NEXT_PUBLIC_VOLCANO_DATABASE --variable VOLCANO_API_URL --variable VOLCANO_ANON_KEY --variable VOLCANO_DATABASE --variable VOLCANO_SERVICE_KEY \
   --variable DECIDER_URL --variable DECIDER_TOKEN --variable LLM_URL --variable LLM_MODEL --variable LLM_TOKEN --variable AGENT_DECIDER_THRESHOLD
 ```
 
