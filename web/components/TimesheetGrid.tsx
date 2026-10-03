@@ -23,11 +23,13 @@ interface Props {
   readOnly: boolean;
   /** Called after each successful save with the saved entries. */
   onSaved?: (entries: Entry[]) => void;
+  /** Reports autosave progress, so the page can hold off submitting until everything is saved. */
+  onSaveStateChange?: (state: SaveState) => void;
 }
 
-type SaveState = 'idle' | 'pending' | 'saving' | 'saved' | 'error';
+export type SaveState = 'idle' | 'pending' | 'saving' | 'saved' | 'error';
 
-export function TimesheetGrid({ timesheetId, periodStart, periodEnd, payType: payTypeProp, dailyHours, readOnly, onSaved }: Props) {
+export function TimesheetGrid({ timesheetId, periodStart, periodEnd, payType: payTypeProp, dailyHours, readOnly, onSaved, onSaveStateChange }: Props) {
   const [entries, setEntries] = useState<Entry[] | null>(null);
   const [cells, setCells] = useState<CellValues>({});
   const [cellErrors, setCellErrors] = useState<Record<string, string>>({});
@@ -48,6 +50,7 @@ export function TimesheetGrid({ timesheetId, periodStart, periodEnd, payType: pa
   }, [timesheetId]);
 
   useEffect(() => { void load(); }, [load]);
+  useEffect(() => { onSaveStateChange?.(saveState); }, [saveState, onSaveStateChange]);
 
   const payType: PayType = payTypeProp !== 'auto' ? payTypeProp
     : entries?.some((e) => e.days != null) ? 'daily' : 'hourly';
@@ -97,6 +100,7 @@ export function TimesheetGrid({ timesheetId, periodStart, periodEnd, payType: pa
 
   function setCell(date: string, code: EntryCode, field: 'hours' | 'days', value: string) {
     dirty.current = true;
+    setSaveState('pending');
     const key = cellKey(date, code);
     setCells((prev) => ({ ...prev, [key]: { hours: prev[key]?.hours ?? '', days: prev[key]?.days ?? '', [field]: value } }));
   }

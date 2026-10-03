@@ -1,7 +1,7 @@
 'use client';
 import { useCallback, useEffect, useState } from 'react';
 import { AppShell } from '../../components/AppShell';
-import { TimesheetGrid } from '../../components/TimesheetGrid';
+import { TimesheetGrid, type SaveState } from '../../components/TimesheetGrid';
 import { Badge, Empty, ErrorBanner, Field, Loading, Notice } from '../../components/ui';
 import { errorMessage, q, write } from '../../lib/api';
 import { compAt, compensationFor, listPeriods, loadSettings, type Comp, type Period, type Timesheet } from '../../lib/data';
@@ -14,6 +14,7 @@ function MyTimesheet() {
   const [periods, setPeriods] = useState<Period[] | null>(null);
   const [periodId, setPeriodId] = useState<string>('');
   const [sheet, setSheet] = useState<Timesheet | null>(null);
+  const [saveState, setSaveState] = useState<SaveState>('idle');
   const [comps, setComps] = useState<Comp[]>([]);
   const [dailyHours, setDailyHours] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -65,6 +66,8 @@ function MyTimesheet() {
   const period = periods.find((p) => p.id === periodId)!;
   const comp = compAt(comps, period.end_date);
   const editable = !!sheet && ['draft', 'rejected'].includes(sheet.status) && period.status === 'open';
+  // Submitting locks the grid, so wait until every change has reached the database.
+  const submittable = saveState === 'idle' || saveState === 'saved';
 
   return (
     <>
@@ -88,11 +91,17 @@ function MyTimesheet() {
       ) : (
         <>
           <TimesheetGrid
-            timesheetId={sheet.id} periodStart={period.start_date} periodEnd={period.end_date}
+            key={sheet.id} timesheetId={sheet.id} periodStart={period.start_date} periodEnd={period.end_date}
             payType={comp?.pay_type ?? 'hourly'} dailyHours={dailyHours} readOnly={!editable}
+            onSaveStateChange={setSaveState}
           />
           <div className="actions">
-            {editable && <button type="button" onClick={() => void submit()} disabled={busy}>Submit for approval</button>}
+            {editable && (
+              <button type="button" onClick={() => void submit()} disabled={busy || !submittable}>
+                {saveState === 'pending' || saveState === 'saving' ? 'Saving changes…' : 'Submit for approval'}
+              </button>
+            )}
+            {editable && saveState === 'error' && <span className="muted">Fix the highlighted cells before submitting.</span>}
             {sheet.status === 'submitted' && period.status === 'open' && (
               <button type="button" className="secondary" onClick={() => void recall()} disabled={busy}>Recall to edit</button>
             )}
