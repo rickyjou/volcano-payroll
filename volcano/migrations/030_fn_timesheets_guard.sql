@@ -49,6 +49,13 @@ BEGIN
         ELSIF btrim(COALESCE(NEW.rejection_note, '')) = '' THEN
             RAISE EXCEPTION 'CONFLICT:NOTE_REQUIRED: give a reason when rejecting a timesheet';
         END IF;
+    ELSIF OLD.status IN ('draft', 'rejected') AND NEW.status = 'approved' AND is_admin
+          AND EXISTS (SELECT 1 FROM employees WHERE id = OLD.employee_id AND status = 'terminated') THEN
+        -- Someone who has left can no longer sign in to submit, so an admin approves for them.
+        NEW.submitted_at := COALESCE(OLD.submitted_at, now());
+        NEW.approved_by := me;
+        NEW.approved_at := now();
+        NEW.rejection_note := NULL;
     ELSIF OLD.status = 'submitted' AND NEW.status = 'draft' AND (OLD.employee_id = me OR is_admin) THEN
         IF p_status <> 'open' THEN
             RAISE EXCEPTION 'CONFLICT:PERIOD_NOT_OPEN: reopen the pay period first';

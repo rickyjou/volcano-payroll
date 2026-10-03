@@ -42,6 +42,15 @@ describe('timesheet workflow', () => {
     const [row] = await ok<{ status: string; approved_by: string }>(service().from('timesheets').select('status,approved_by').eq('id', sheet));
     expect(row).toEqual({ status: 'approved', approved_by: org.manager.employeeId });
   });
+  it('lets an admin approve the unsubmitted timesheet of someone who has left, but not of an active employee', async () => {
+    const [{ id: bobSheet }] = await ok<{ id: string }>(org.bob.client.insert('timesheets', { employee_id: org.bob.employeeId, pay_period_id: periodId }));
+    await ok(org.bob.client.insert('time_entries', { timesheet_id: bobSheet, work_date: '2026-09-01', earning_code: 'PTO', hours: 8 }));
+    expect(await errorOf(org.admin.client.update('timesheets', { status: 'approved' }).eq('id', bobSheet))).toContain('CONFLICT:INVALID_TRANSITION');
+    await ok(org.admin.client.update('employees', { status: 'terminated', termination_date: '2026-09-15' }).eq('id', org.bob.employeeId));
+    await ok(org.admin.client.update('timesheets', { status: 'approved' }).eq('id', bobSheet));
+    const [row] = await ok<{ status: string; approved_by: string }>(service().from('timesheets').select('status,approved_by').eq('id', bobSheet));
+    expect(row).toEqual({ status: 'approved', approved_by: org.admin.employeeId });
+  });
 });
 
 describe('payroll run lifecycle', () => {

@@ -31,7 +31,8 @@ function Approvals() {
     try {
       const [p, employees, s] = await Promise.all([listPeriods(), listEmployees(), loadSettings()]);
       // RLS returns direct reports to managers and everyone to admins.
-      const people = employees.filter((e) => e.status === 'active' && (isAdmin || e.manager_id === me!.id));
+      // Everyone who can appear in some period; leavers are filtered per period below.
+      const people = employees.filter((e) => isAdmin || e.manager_id === me!.id);
       setPeriods(p);
       setTeam(people);
       setDailyHours(s.ot_applies_to_daily);
@@ -69,7 +70,10 @@ function Approvals() {
   if (periods.length === 0) return <Empty>No pay periods yet.</Empty>;
   const period = periods.find((p) => p.id === periodId)!;
 
+  // Leavers stay listed for the months they worked in, so their last timesheet can be approved.
+  const employedInPeriod = (e: EmployeeRow) => e.status === 'active' || (e.termination_date != null && e.termination_date >= period.start_date);
   const rows = team
+    .filter(employedInPeriod)
     .map((e) => ({ e, sheet: sheets.find((s) => s.employee_id === e.id) ?? null }))
     .sort((a, b) => (a.sheet ? ORDER[a.sheet.status] : 9) - (b.sheet ? ORDER[b.sheet.status] : 9) || a.e.last_name.localeCompare(b.e.last_name));
   const waiting = rows.filter((r) => r.sheet?.status === 'submitted').length;
@@ -110,6 +114,12 @@ function Approvals() {
                     value={notes[sheet.id] ?? ''} onChange={(ev) => setNotes({ ...notes, [sheet.id]: ev.target.value })}
                   />
                   <button type="button" className="secondary" disabled={busy === sheet.id || !(notes[sheet.id] ?? '').trim()} onClick={() => void decide(sheet, 'rejected')}>Return</button>
+                </div>
+              )}
+              {isAdmin && e.status === 'terminated' && (sheet?.status === 'draft' || sheet?.status === 'rejected') && period.status !== 'finalized' && (
+                <div className="actions">
+                  <p className="muted">{e.first_name} has left and can no longer submit.</p>
+                  <button type="button" disabled={busy === sheet.id} onClick={() => void decide(sheet, 'approved')}>Approve for {e.first_name}</button>
                 </div>
               )}
               {isAdmin && sheet?.status === 'approved' && period.status === 'open' && (
