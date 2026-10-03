@@ -6,3 +6,7 @@ web/.env.local
 *.tsbuildinfo
 .vitest/
 .DS_Store
+.volcano-cloud/
+volcano/cloud.env
+.superpowers/
+.playwright-mcp/

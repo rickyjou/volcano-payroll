@@ -13,7 +13,8 @@
     "build:functions": "esbuild src/functions/*.ts --bundle --platform=node --target=node22 --format=cjs --outdir=volcano/functions --log-level=warning",
     "db:generate": "tsx scripts/gen-migrations.ts",
     "db:migrate": "npm run db:generate && volcano migrations deploy --all -d payroll",
-    "bootstrap-admin": "tsx --env-file=volcano/volcano.env scripts/bootstrap-admin.ts"
+    "bootstrap-admin": "tsx --env-file=volcano/volcano.env scripts/bootstrap-admin.ts",
+    "cloud": "sh scripts/volcano-cloud.sh"
   },
   "dependencies": {
     "@volcano.dev/sdk": "^1.15.1",

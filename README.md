@@ -96,17 +96,24 @@ refuse until you regenerate.
 
 Deploy only when you mean to: this touches real data.
 
+The cloud project belongs to a different Volcano account than other local projects, so cloud
+commands go through `npm run cloud -- <volcano args>` (`scripts/volcano-cloud.sh`). It runs the
+Volcano CLI with `HOME` pointed at the gitignored `.volcano-cloud/` directory, so this repo keeps
+its own login and active project and the global `volcano login` stays as it is. Keep using plain
+`volcano` for the local stack.
+
 ```sh
-volcano login
-volcano use 1dc794d1-99e0-4c56-af27-e10b6842f924
-volcano cloud databases create payroll            # first time only
+npm run cloud -- login                            # browser login to the payroll account
+npm run cloud -- use 1dc794d1-99e0-4c56-af27-e10b6842f924
+npm run cloud -- cloud databases create payroll   # first time only
 npm run db:generate
-volcano cloud databases migration up --all -d payroll
+npm run cloud -- cloud databases migration up --all -d payroll
 npm run build:functions
-volcano cloud variables deploy --file <cloud env file>
-volcano cloud functions deploy --all
-volcano cloud config deploy
-volcano cloud frontends deploy --name payroll --path . --variable-scope scoped \
+cp volcano/cloud.env.example volcano/cloud.env    # then fill in the keys (gitignored)
+npm run cloud -- cloud variables deploy --file volcano/cloud.env
+npm run cloud -- cloud functions deploy --all
+npm run cloud -- cloud config deploy
+npm run cloud -- cloud frontends deploy --name payroll --path . --variable-scope scoped \
   --variable NEXT_PUBLIC_VOLCANO_API_URL --variable NEXT_PUBLIC_VOLCANO_ANON_KEY \
   --variable NEXT_PUBLIC_VOLCANO_DATABASE --variable VOLCANO_SERVICE_KEY
 ```
@@ -116,8 +123,8 @@ Cloud variables:
 | Variable | Value |
 |---|---|
 | `VOLCANO_API_URL`, `NEXT_PUBLIC_VOLCANO_API_URL` | `https://api.volcano.dev` |
-| `VOLCANO_ANON_KEY`, `NEXT_PUBLIC_VOLCANO_ANON_KEY` | `volcano projects keys anon list` |
-| `VOLCANO_SERVICE_KEY` | `volcano projects keys service list` (secret; server-only) |
+| `VOLCANO_ANON_KEY`, `NEXT_PUBLIC_VOLCANO_ANON_KEY` | `npm run cloud -- projects keys anon list` |
+| `VOLCANO_SERVICE_KEY` | `npm run cloud -- projects keys service list` (secret; server-only) |
 | `VOLCANO_DATABASE`, `NEXT_PUBLIC_VOLCANO_DATABASE` | `payroll` |
 
 Never set `PAYROLL_ALLOW_UNCONFIRMED_EMAIL` in the cloud. Turn on email confirmation for the project
