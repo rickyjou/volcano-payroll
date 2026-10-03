@@ -8,6 +8,7 @@ import { Badge, Empty, ErrorBanner, Field, Loading, Notice } from '../../../comp
 import { errorMessage, invoke, q, write } from '../../../lib/api';
 import { dateTime } from '../../../lib/format';
 import { getVolcano } from '../../../lib/volcano';
+import { useDataChanged } from '../../../lib/events';
 
 interface Mapping { id: string; name: string; based_on: string | null; config: MappingConfig; updated_at: string }
 interface ApiKey { id: string; name: string; prefix: string; created_at: string; last_used_at: string | null; revoked_at: string | null }
@@ -43,6 +44,7 @@ function Integrations() {
     }
   }, []);
   useEffect(() => { void load(); }, [load]);
+  useDataChanged(load);
 
   async function run(fn: () => Promise<unknown>, done: string | null) {
     setBusy(true);

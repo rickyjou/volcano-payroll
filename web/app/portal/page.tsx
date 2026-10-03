@@ -8,6 +8,7 @@ import { compAt, compensationFor, listPeriods, loadSettings, type Comp, type Per
 import { monthLabel } from '../../lib/format';
 import { useSession } from '../../lib/session';
 import { getVolcano } from '../../lib/volcano';
+import { useDataChanged } from '../../lib/events';
 
 function MyTimesheet() {
   const { employee } = useSession();
@@ -15,6 +16,8 @@ function MyTimesheet() {
   const [periodId, setPeriodId] = useState<string>('');
   const [sheet, setSheet] = useState<Timesheet | null>(null);
   const [saveState, setSaveState] = useState<SaveState>('idle');
+  // Bumped when the assistant changes time, so the grid reloads its entries.
+  const [gridVersion, setGridVersion] = useState(0);
   const [comps, setComps] = useState<Comp[]>([]);
   const [dailyHours, setDailyHours] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -49,6 +52,7 @@ function MyTimesheet() {
   }, [periodId, employee]);
 
   useEffect(() => { void loadSheet(); }, [loadSheet]);
+  useDataChanged(() => { void loadSheet(); setGridVersion((v) => v + 1); });
 
   async function act(fn: () => Promise<unknown>) {
     setBusy(true);
@@ -91,7 +95,7 @@ function MyTimesheet() {
       ) : (
         <>
           <TimesheetGrid
-            key={sheet.id} timesheetId={sheet.id} periodStart={period.start_date} periodEnd={period.end_date}
+            key={`${sheet.id}-${gridVersion}`} timesheetId={sheet.id} periodStart={period.start_date} periodEnd={period.end_date}
             payType={comp?.pay_type ?? 'hourly'} dailyHours={dailyHours} readOnly={!editable}
             onSaveStateChange={setSaveState}
           />

@@ -7,6 +7,7 @@ import { listPeriods, type Period, type Timesheet } from '../../../lib/data';
 import { money, monthLabel, qty } from '../../../lib/format';
 import { useSession } from '../../../lib/session';
 import { getVolcano } from '../../../lib/volcano';
+import { useDataChanged } from '../../../lib/events';
 
 interface Line { pay_period_id: string; earning_code: string; hours: string | null; days: string | null; amount_cents: number }
 
@@ -32,6 +33,7 @@ function History() {
   }, [employee]);
 
   useEffect(() => { void load(); }, [load]);
+  useDataChanged(load);
 
   if (error) return <ErrorBanner error={error} onRetry={() => void load()} />;
   if (!data) return <Loading />;

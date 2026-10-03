@@ -6,6 +6,7 @@ import { Badge, ErrorBanner, Loading } from '../../components/ui';
 import { errorMessage } from '../../lib/api';
 import { listEmployees, listPeriods, listRuns, timesheetsForPeriod, type Period, type Run, type Timesheet } from '../../lib/data';
 import { money, monthLabel } from '../../lib/format';
+import { useDataChanged } from '../../lib/events';
 
 function Dashboard() {
   const [data, setData] = useState<{ period: Period | null; sheets: Timesheet[]; active: number; run: Run | null } | null>(null);
@@ -24,6 +25,7 @@ function Dashboard() {
   }, []);
 
   useEffect(() => { void load(); }, [load]);
+  useDataChanged(load);
 
   if (error) return <ErrorBanner error={error} onRetry={() => void load()} />;
   if (!data) return <Loading />;

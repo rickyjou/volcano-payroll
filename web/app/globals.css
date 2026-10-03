@@ -101,3 +101,20 @@ td.cell-error input { border-color: var(--bad-text); }
 .secret { display: block; margin-top: 0.5rem; word-break: break-all; }
 
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+
+/* Chat assistant */
+.chat-panel { position: fixed; top: 0; right: 0; bottom: 0; width: min(26rem, 100vw); z-index: 20; display: flex; flex-direction: column; background: var(--surface); border-left: 1px solid var(--border); box-shadow: -4px 0 16px rgb(0 0 0 / 0.12); }
+.chat-head { display: flex; justify-content: space-between; align-items: center; padding: 0.75rem 1rem; border-bottom: 1px solid var(--border); }
+.chat-log { flex: 1; overflow-y: auto; padding: 0.75rem 1rem; display: grid; gap: 0.75rem; align-content: start; }
+.chat-msg p { margin: 0; white-space: pre-wrap; }
+.chat-msg { display: grid; gap: 0.5rem; max-width: 100%; }
+.chat-msg.user { justify-self: end; background: var(--info-bg); color: var(--info-text); padding: 0.5rem 0.75rem; border-radius: 12px 12px 4px 12px; }
+.chat-msg.assistant { justify-self: start; }
+.chat-msg > button, .chat-msg > a { justify-self: start; }
+.chat-card { display: grid; gap: 0.4rem; padding: 0.6rem 0.75rem; border: 1px solid var(--border); border-radius: 10px; background: var(--bg); }
+.chat-card table { font-size: 0.85rem; background: transparent; }
+.chat-note { display: flex; gap: 0.4rem; }
+.chat-note input { min-height: 32px; padding: 0.25rem 0.5rem; width: 9rem; }
+.chat-input { display: flex; gap: 0.5rem; padding: 0.75rem 1rem; border-top: 1px solid var(--border); }
+.chat-input input { flex: 1; min-width: 0; }
+@media (max-width: 640px) { .chat-panel { width: 100vw; border-left: none; } }

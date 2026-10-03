@@ -7,6 +7,7 @@ import { Badge, Empty, ErrorBanner, Field, Loading, Notice } from '../../../comp
 import { errorMessage, q } from '../../../lib/api';
 import { listEmployees, type EmployeeRow } from '../../../lib/data';
 import { getVolcano } from '../../../lib/volcano';
+import { useDataChanged } from '../../../lib/events';
 
 const PAGE = 50;
 
@@ -25,6 +26,7 @@ function Employees() {
     try { setAll(await listEmployees()); } catch (err) { setError(errorMessage(err)); }
   }, []);
   useEffect(() => { void load(); }, [load]);
+  useDataChanged(load);
 
   const filtered = useMemo(() => {
     const s = search.trim().toLowerCase();

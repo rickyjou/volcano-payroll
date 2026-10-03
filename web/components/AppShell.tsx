@@ -1,9 +1,10 @@
 'use client';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { useEffect, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import type { Role } from '../../src/lib/employee-import';
 import { useSession } from '../lib/session';
+import { ChatPanel } from './ChatPanel';
 import { Loading } from './ui';
 
 const LINKS: { href: string; label: string; roles: Role[] }[] = [
@@ -22,6 +23,7 @@ export function AppShell({ roles, children }: { roles: Role[]; children: ReactNo
   const { status, employee, linkError, signOut } = useSession();
   const router = useRouter();
   const pathname = usePathname();
+  const [chatOpen, setChatOpen] = useState(false);
 
   useEffect(() => {
     if (status === 'signed_out') router.replace('/login');
@@ -48,6 +50,7 @@ export function AppShell({ roles, children }: { roles: Role[]; children: ReactNo
           ))}
         </nav>
         <div className="who">
+          <button type="button" className="small" aria-expanded={chatOpen} onClick={() => setChatOpen((o) => !o)}>Chat</button>
           <span>{employee.first_name} {employee.last_name}</span>
           <button type="button" className="secondary small" onClick={() => void signOut()}>Sign out</button>
         </div>
@@ -60,6 +63,7 @@ export function AppShell({ roles, children }: { roles: Role[]; children: ReactNo
           </>
         )}
       </main>
+      {chatOpen && <ChatPanel role={employee.role} onClose={() => setChatOpen(false)} />}
     </>
   );
 }

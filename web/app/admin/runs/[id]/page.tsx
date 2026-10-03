@@ -10,6 +10,7 @@ import { errorMessage, invoke, q } from '../../../../lib/api';
 import { listPeriods, type Period, type Run } from '../../../../lib/data';
 import { dateTime, downloadFile, money, monthLabel, qty } from '../../../../lib/format';
 import { getVolcano } from '../../../../lib/volcano';
+import { useDataChanged } from '../../../../lib/events';
 
 interface Line { id: string; employee_id: string; first_name: string; last_name: string; external_id: string | null; pay_type: string; earning_code: string; hours: string | null; days: string | null; rate_cents: number; amount_cents: number }
 interface ExportRow { id: string; mapping_key: string; filename: string; created_at: string; sha256: string; api_key_id: string | null }
@@ -54,6 +55,7 @@ function RunDetail({ id }: { id: string }) {
     }
   }, [id]);
   useEffect(() => { void load(); }, [load]);
+  useDataChanged(load);
 
   async function act(fn: () => Promise<unknown>, done: string, after?: (result: unknown) => void) {
     setBusy(true);

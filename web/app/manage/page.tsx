@@ -10,6 +10,7 @@ import {
 import { monthLabel } from '../../lib/format';
 import { useSession } from '../../lib/session';
 import { getVolcano } from '../../lib/volcano';
+import { useDataChanged } from '../../lib/events';
 
 const ORDER = { submitted: 0, rejected: 1, draft: 2, approved: 3 } as const;
 
@@ -50,6 +51,7 @@ function Approvals() {
   }, [periodId]);
 
   useEffect(() => { void loadSheets(); }, [loadSheets]);
+  useDataChanged(loadSheets);
 
   async function decide(sheet: Timesheet, status: 'approved' | 'rejected' | 'draft') {
     setBusy(sheet.id);

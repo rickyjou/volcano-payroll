@@ -11,6 +11,7 @@ import { errorMessage, q, write } from '../../../../lib/api';
 import { compensationFor, listEmployees, type Comp, type EmployeeRow } from '../../../../lib/data';
 import { RATE_UNIT, money } from '../../../../lib/format';
 import { getVolcano } from '../../../../lib/volcano';
+import { useDataChanged } from '../../../../lib/events';
 
 function EmployeeDetail({ id }: { id: string }) {
   const [all, setAll] = useState<EmployeeRow[] | null>(null);
@@ -32,6 +33,7 @@ function EmployeeDetail({ id }: { id: string }) {
     }
   }, [id]);
   useEffect(() => { void load(); }, [load]);
+  useDataChanged(load);
 
   async function run(fn: () => Promise<unknown>, done: string) {
     setBusy(true);

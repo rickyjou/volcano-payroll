@@ -8,6 +8,7 @@ import { errorMessage, q, write } from '../../../lib/api';
 import { listPeriods, type Period } from '../../../lib/data';
 import { monthLabel } from '../../../lib/format';
 import { getVolcano } from '../../../lib/volcano';
+import { useDataChanged } from '../../../lib/events';
 
 type Counts = Record<string, Record<string, number>>;
 
@@ -36,6 +37,7 @@ function Periods() {
     }
   }, []);
   useEffect(() => { void load(); }, [load]);
+  useDataChanged(load);
 
   async function run(fn: () => Promise<unknown>, done: string) {
     setBusy(true);

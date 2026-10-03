@@ -5,6 +5,7 @@ import { ErrorBanner, Field, Loading, Notice } from '../../../components/ui';
 import { errorMessage, write } from '../../../lib/api';
 import { loadSettings, type SettingsRow } from '../../../lib/data';
 import { getVolcano } from '../../../lib/volcano';
+import { useDataChanged } from '../../../lib/events';
 
 const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 type Form = Record<'company_name' | 'ot_weekly_threshold' | 'ot_daily_threshold' | 'dt_daily_threshold' | 'ot_multiplier' | 'dt_multiplier' | 'week_starts_on', string> & { ot_applies_to_daily: boolean };
@@ -40,6 +41,7 @@ function Settings() {
     try { setForm(toForm(await loadSettings())); } catch (err) { setError(errorMessage(err)); }
   }, []);
   useEffect(() => { void load(); }, [load]);
+  useDataChanged(load);
 
   async function save(e: FormEvent) {
     e.preventDefault();

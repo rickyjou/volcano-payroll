@@ -7,6 +7,7 @@ import { Badge, Empty, ErrorBanner, Loading } from '../../../components/ui';
 import { errorMessage, invoke } from '../../../lib/api';
 import { listPeriods, listRuns, type Period, type Run } from '../../../lib/data';
 import { dateTime, money, monthLabel } from '../../../lib/format';
+import { useDataChanged } from '../../../lib/events';
 
 function Runs() {
   const router = useRouter();
@@ -24,6 +25,7 @@ function Runs() {
     }
   }, []);
   useEffect(() => { void load(); }, [load]);
+  useDataChanged(load);
 
   async function generate(periodId: string) {
     setBusy(periodId);
