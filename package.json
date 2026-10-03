@@ -2,6 +2,9 @@
   "name": "payroll",
   "version": "0.1.0",
   "private": true,
+  "workspaces": [
+    "web"
+  ],
   "scripts": {
     "dev": "next dev web",
     "build": "next build web",
