@@ -27,7 +27,8 @@ describe('api keys', () => {
     expect(parseApiKey(key)).toEqual({ prefix });
     expect(hash).toBe(sha256Hex(key));
     expect(apiKeyMatches(key, hash)).toBe(true);
-    expect(apiKeyMatches(`${key.slice(0, -1)}x`, hash)).toBe(false);
+    const tampered = `${key.slice(0, -1)}${key.endsWith('x') ? 'y' : 'x'}`;
+    expect(apiKeyMatches(tampered, hash)).toBe(false);
   });
   it('rejects malformed keys', () => {
     expect(parseApiKey('pk_123_abc')).toBeNull();
