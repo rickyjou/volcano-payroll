@@ -51,10 +51,15 @@ const NIL = '00000000-0000-0000-0000-000000000000';
 /** Deletes all application data (service key bypasses RLS and guard checks). */
 export async function resetData(): Promise<void> {
   const db = service();
-  for (const t of ['webhook_deliveries', 'webhook_endpoints', 'exports', 'api_keys', 'export_mappings', 'payroll_runs', 'time_entries', 'timesheets', 'pay_periods', 'compensation']) {
+  for (const t of ['agent_actions', 'chat_messages', 'webhook_deliveries', 'webhook_endpoints', 'exports', 'api_keys', 'export_mappings', 'payroll_runs', 'time_entries', 'timesheets', 'pay_periods', 'compensation']) {
     await ok(db.delete(t).neq('id', NIL));
   }
   await ok(db.delete('audit_log').gte('id', 0));
+  // Settings is a singleton that survives deletes; put the defaults back.
+  await ok(db.update('settings', {
+    company_name: 'My Company', ot_weekly_threshold: 40, ot_daily_threshold: null, dt_daily_threshold: null,
+    ot_multiplier: 1.5, dt_multiplier: 2, ot_applies_to_daily: false, week_starts_on: 0,
+  }).eq('id', true));
   await ok(db.update('employees', { manager_id: null }).neq('id', NIL));
   await ok(db.delete('employees').neq('id', NIL));
 }
