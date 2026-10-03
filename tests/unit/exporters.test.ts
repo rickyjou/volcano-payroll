@@ -85,3 +85,21 @@ describe('validateMapping', () => {
     ]);
   });
 });
+
+describe('render warnings for pay the file does not carry', () => {
+  const daily: ExportLine = { ...base, employee_id: 'e3', external_id: 'E-3', first_name: 'Dee', last_name: 'Daily', email: 'd@x.com', pay_type: 'daily', earning_code: 'REG', hours: null, days: 4.5, rate_cents: 25_000, amount_cents: 112_500 };
+
+  it('warns when an hours-only preset drops day-rate and salary pay', () => {
+    const out = render(run, [...lines, daily], findPreset('gusto')!.config, 'gusto');
+    expect(out.warnings).toEqual([
+      'Dee Daily: REG $1125.00 is not in this file',
+      'Ada Lovelace, Countess: SAL $10000.00 is not in this file',
+    ]);
+  });
+
+  it('has no warnings when every amount has a column', () => {
+    expect(render(run, [...lines, daily], findPreset('generic_csv')!.config, 'generic_csv').warnings).toEqual([]);
+    expect(render(run, [...lines, daily], findPreset('generic_json')!.config, 'generic_json').warnings).toEqual([]);
+    expect(render(run, lines.slice(0, 2), findPreset('gusto')!.config, 'gusto').warnings).toEqual([]);
+  });
+});

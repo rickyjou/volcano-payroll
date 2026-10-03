@@ -28,6 +28,7 @@ function RunDetail({ id }: { id: string }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [exportWarnings, setExportWarnings] = useState<string[]>([]);
 
   const load = useCallback(async () => {
     setError(null);
@@ -157,11 +158,21 @@ function RunDetail({ id }: { id: string }) {
               </select>
             </Field>
             <button type="button" disabled={busy} onClick={() => void act(
-              () => invoke<{ filename: string; content_type: string; body: string }>('payroll-export', { run_id: id, mapping_key: mappingKey }),
+              () => invoke<{ filename: string; content_type: string; body: string; warnings?: string[] }>('payroll-export', { run_id: id, mapping_key: mappingKey }),
               'Export created.',
-              (r) => { const f = r as { filename: string; content_type: string; body: string }; downloadFile(f.filename, f.content_type, f.body); },
+              (r) => {
+                const f = r as { filename: string; content_type: string; body: string; warnings?: string[] };
+                setExportWarnings(f.warnings ?? []);
+                downloadFile(f.filename, f.content_type, f.body);
+              },
             )}>Export and download</button>
           </div>
+          {exportWarnings.length > 0 && (
+            <div className="alert error" role="alert">
+              <p>This format leaves out some pay. Add it in your provider by hand, or use a format with an amount column:</p>
+              <ul>{exportWarnings.map((w) => <li key={w}>{w}</li>)}</ul>
+            </div>
+          )}
           <p className="muted">{PRESETS.find((p) => p.key === mappingKey)?.note}</p>
           {exports.length > 0 && (
             <table>

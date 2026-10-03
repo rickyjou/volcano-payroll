@@ -43,6 +43,8 @@ export interface RenderedExport {
   filename: string;
   content_type: string;
   body: string;
+  /** Pay on a line that no column carries (e.g. day-rate pay in an hours-only layout). */
+  warnings: string[];
 }
 
 export type ExportLine = RunLine;

@@ -81,6 +81,8 @@ async function route(db: VolcanoAuth, path: string[], query: URLSearchParams, ap
         'Content-Type': file.content_type,
         'Content-Disposition': `attachment; filename="${file.filename}"`,
         'X-Content-SHA256': sha256,
+        // Number of lines whose pay this format leaves out (see render warnings).
+        'X-Export-Warnings': String(file.warnings.length),
         'Cache-Control': 'no-store',
       },
       body: file.body,

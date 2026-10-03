@@ -108,6 +108,23 @@ function csvRows(run: ExportRun, lines: ExportLine[], c: MappingConfig): string[
   return [header, ...rows];
 }
 
+/** True when some column puts this line's pay into the file (its amount, or its hours/days). */
+function carried(l: ExportLine, c: MappingConfig): boolean {
+  return c.columns.some((col) => {
+    if (col.const != null || !col.field) return false;
+    if (col.code && col.code !== l.earning_code) return false;
+    if (c.row_mode === 'per_line' && col.code) return false;
+    return col.field === 'amount' || (col.field === 'hours' && l.hours != null) || (col.field === 'days' && l.days != null);
+  });
+}
+
+function uncarried(lines: ExportLine[], c: MappingConfig): string[] {
+  if (c.format === 'json') return [];
+  return [...lines].sort(byLine)
+    .filter((l) => l.amount_cents > 0 && !carried(l, c))
+    .map((l) => `${l.first_name} ${l.last_name}: ${l.earning_code} $${centsToDollars(l.amount_cents)} is not in this file`);
+}
+
 export function render(run: ExportRun, lines: ExportLine[], c: MappingConfig, mappingKey: string): RenderedExport {
   const errors = validateMapping(c);
   if (errors.length) throw new Error(`Invalid mapping: ${errors.join('; ')}`);
@@ -123,7 +140,7 @@ export function render(run: ExportRun, lines: ExportLine[], c: MappingConfig, ma
         hours: l.hours, days: l.days, rate_cents: l.rate_cents, amount_cents: l.amount_cents,
       })),
     }, null, 2);
-    return { filename: `${base}.json`, content_type: 'application/json', body };
+    return { filename: `${base}.json`, content_type: 'application/json', body, warnings: [] };
   }
-  return { filename: `${base}.csv`, content_type: 'text/csv; charset=utf-8', body: toCsv(csvRows(run, lines, c)) };
+  return { filename: `${base}.csv`, content_type: 'text/csv; charset=utf-8', body: toCsv(csvRows(run, lines, c)), warnings: uncarried(lines, c) };
 }

@@ -45,6 +45,7 @@ describe('integration API', () => {
     const r = await call(['runs', runId, 'export'], 'mapping=gusto');
     expect(r.status).toBe(200);
     expect(r.headers['Content-Disposition']).toBe('attachment; filename="payroll-2026-09-gusto.csv"');
+    expect(r.headers['X-Export-Warnings']).toBe('0');
     expect(r.body.split('\r\n')[1]).toBe(`Test,Alice,${(await ok<{ email: string }>(service().from('employees').select('email').eq('external_id', 'E-ALICE')))[0].email},40.00,,,,,`);
     expect(await ok(service().from('exports').select('id'))).toHaveLength(1);
   });
