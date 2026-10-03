@@ -21,6 +21,7 @@ const THRESHOLDS = [0.7, 0.8, 0.85, 0.9, 0.93, 0.95, 0.97, 0.99];
 const cases: Case[] = readFileSync('tests/agent/decider-cases.jsonl', 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l));
 
 async function main() {
+  if (cases.length === 0) throw new Error('tests/agent/decider-cases.jsonl has no cases');
   const decider = new HttpDecider({ url, timeoutMs: 30_000 });
   const asked: { c: Case; answers: Record<string, DeciderAnswer>; ms: number }[] = [];
   for (const c of cases) {

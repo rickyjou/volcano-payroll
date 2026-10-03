@@ -36,6 +36,12 @@ describe('HttpDecider', () => {
     expect(probability(answers, 'c')).toBe(0.8);
     expect(probability(answers, 'a')).toBeNull();
   });
+  it('treats a malformed answer as not confident', () => {
+    const answers = JSON.parse('{"a":{"type":"choice","choice":"x"},"b":{"type":"choice","choice":"y","confidence":"0.99"},"c":{"type":"noul"}}');
+    expect(picked(answers, 'a', 0.9)).toBeNull();
+    expect(picked(answers, 'b', 0.9)).toBeNull();
+    expect(probability(answers, 'c')).toBeNull();
+  });
 });
 
 describe('OpenAiCompatibleLlm', () => {

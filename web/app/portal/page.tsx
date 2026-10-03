@@ -52,7 +52,12 @@ function MyTimesheet() {
   }, [periodId, employee]);
 
   useEffect(() => { void loadSheet(); }, [loadSheet]);
-  useDataChanged(() => { void loadSheet(); setGridVersion((v) => v + 1); });
+  // Remounting the grid drops unsaved edits, so only do it when time actually changed.
+  useDataChanged((areas) => {
+    if (!areas.includes('timesheets')) return;
+    void loadSheet();
+    setGridVersion((v) => v + 1);
+  });
 
   async function act(fn: () => Promise<unknown>) {
     setBusy(true);

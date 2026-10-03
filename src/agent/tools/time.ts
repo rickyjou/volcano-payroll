@@ -2,7 +2,7 @@
 // and profile. Hours are never overwritten silently (see planLog).
 import type { ISODate } from '../../lib/dates';
 import { ENTRY_CODES, type EntryCode } from '../../lib/types';
-import { isoDate, num, rows } from '../../server/db';
+import { isoDate, num, rows, selectAll } from '../../server/db';
 import {
   changed, ensureTimesheet, entriesFor, findTimesheet, getEmployee, payTypeOn, periodFor, type EntryRow, type TimesheetRow,
 } from '../queries';
@@ -151,6 +151,13 @@ export const clearTime: AgentTool = {
   },
   async undo(ctx, u) {
     const { entries } = u as { entries: Omit<EntryRow, 'id'>[] };
+    // Restore all or nothing: time logged on that day since would collide with the old entries.
+    const sheets = [...new Set(entries.map((e) => e.timesheet_id))];
+    const now = (await Promise.all(sheets.map((id) => entriesFor(ctx.db, id)))).flat();
+    const taken = entries.filter((e) => now.some((n) => n.timesheet_id === e.timesheet_id && n.work_date === e.work_date && n.earning_code === e.earning_code));
+    if (taken.length) {
+      throw new Refusal(`${dayLabel(taken[0].work_date)} has time logged since (${taken.map((e) => e.earning_code).join(', ')}), so it was not undone.`);
+    }
     for (const e of entries) await rows(ctx.db.insert('time_entries', { timesheet_id: e.timesheet_id, work_date: e.work_date, earning_code: e.earning_code, hours: e.hours, days: e.days }));
     return { text: `Undone: restored ${entries.map((e) => `${amountLabel(e)} ${e.earning_code}`).join(', ')}.`, changed: ['timesheets'] };
   },
@@ -261,9 +268,18 @@ export const showMyPay: AgentTool = {
   kind: 'read',
   args: { period: { type: 'uuid', slot: 'period', description: 'Pay period (default: the latest paid one)' } },
   async run(ctx, a) {
-    let q = ctx.db.from('payroll_run_lines').select('pay_period_id,earning_code,hours,days,amount_cents').eq('employee_id', ctx.me.id);
-    if (typeof a.period === 'string') q = q.eq('pay_period_id', a.period);
-    const lines = (await rows<{ pay_period_id: string; earning_code: string; hours: unknown; days: unknown; amount_cents: number }>(q.limit(500)));
+    type Line = { run_id: string; pay_period_id: string; earning_code: string; hours: unknown; days: unknown; amount_cents: number };
+    const all = await selectAll<Line>((offset, limit) => {
+      let q = ctx.db.from('payroll_run_lines').select('run_id,pay_period_id,earning_code,hours,days,amount_cents').eq('employee_id', ctx.me.id);
+      if (typeof a.period === 'string') q = q.eq('pay_period_id', a.period);
+      return q.order('id').limit(limit).offset(offset);
+    });
+    // RLS shows employees only finalized lines, but admins see draft and voided runs too.
+    const runIds = [...new Set(all.map((l) => l.run_id))];
+    const finalized = ctx.me.role === 'admin' && runIds.length
+      ? new Set((await rows<{ id: string }>(ctx.db.from('payroll_runs').select('id').in('id', runIds).eq('status', 'finalized'))).map((r) => r.id))
+      : null;
+    const lines = finalized ? all.filter((l) => finalized.has(l.run_id)) : all;
     if (lines.length === 0) return { text: 'There is no finalized pay for you yet.' };
     const periods = await rows<{ id: string; start_date: string }>(ctx.db.from('pay_periods').select('id,start_date').in('id', [...new Set(lines.map((l) => l.pay_period_id))]));
     const latest = periods.map((p) => ({ ...p, start_date: isoDate(p.start_date) })).sort((x, y) => (x.start_date < y.start_date ? 1 : -1))[0];

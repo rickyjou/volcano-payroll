@@ -45,12 +45,13 @@ export class HttpDecider implements Decider {
 /** The chosen option when it is at least `threshold` confident, else null. */
 export function picked(answers: Record<string, DeciderAnswer> | null, name: string, threshold: number): { value: string; confidence: number } | null {
   const a = answers?.[name];
-  if (!a || a.type !== 'choice' || a.confidence < threshold) return null;
+  // The answers come from another service: a missing or non-numeric confidence is not confident.
+  if (!a || a.type !== 'choice' || typeof a.choice !== 'string' || typeof a.confidence !== 'number' || !(a.confidence >= threshold)) return null;
   return { value: a.choice, confidence: a.confidence };
 }
 
 /** Probability of a yes/no question, or null when it was not asked. */
 export function probability(answers: Record<string, DeciderAnswer> | null, name: string): number | null {
   const a = answers?.[name];
-  return a && a.type === 'noul' ? a.noul : null;
+  return a && a.type === 'noul' && typeof a.noul === 'number' ? a.noul : null;
 }

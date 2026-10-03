@@ -89,14 +89,16 @@ export async function getEmployee(db: VolcanoAuth, id: string): Promise<Employee
  * Timesheets the user can act on as an approver: submitted ones in unfinalized periods,
  * plus (admins) unsubmitted ones of people who have left. RLS limits managers to reports.
  */
-export async function pendingApprovals(db: VolcanoAuth, me: { id: string; role: string }, periods: PeriodRef[]): Promise<PendingRef[]> {
+export async function pendingApprovals(
+  db: VolcanoAuth, me: { id: string; role: string }, periods: PeriodRef[], employees?: Promise<EmployeeRow[]>,
+): Promise<PendingRef[]> {
   if (me.role === 'employee') return [];
   const live = periods.filter((p) => p.status !== 'finalized').map((p) => p.id);
   if (live.length === 0) return [];
   const sheets = await rows<TimesheetRow>(db.from('timesheets').select('id,employee_id,pay_period_id,status,rejection_note')
     .in('pay_period_id', live).in('status', ['submitted', 'draft', 'rejected']).limit(2000));
   if (sheets.length === 0) return [];
-  const people = new Map((await listEmployees(db)).map((e) => [e.id, e]));
+  const people = new Map((await (employees ?? listEmployees(db))).map((e) => [e.id, e]));
   return sheets
     .filter((s) => {
       const e = people.get(s.employee_id);

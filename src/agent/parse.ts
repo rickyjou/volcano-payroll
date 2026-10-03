@@ -23,6 +23,14 @@ function validDate(y: number, m: number, d: number): ISODate | null {
   }
 }
 
+/** A month and day without a year: this year's, or last year's when that would be over
+ *  half a year ahead ("dec 30" said in January means the one just gone). */
+function nearestDate(today: ISODate, m: number, d: number): ISODate | null {
+  const year = Number(today.slice(0, 4));
+  const date = validDate(year, m, d);
+  return date && date > addDays(today, 183) ? validDate(year - 1, m, d) : date;
+}
+
 /** Removes date-like phrases so their numbers are not read as amounts. */
 function withoutDates(text: string): string {
   return text
@@ -46,7 +54,7 @@ export function parseAmount(text: string): Amount | null {
   if (/\b(full|whole|one|a|1)\s+day\b|\b1(\.0)?\s*days?\b/.test(t)) return { days: 1 };
   const hm = /\b(\d{1,2}):([0-5]\d)\b/.exec(t);
   if (hm) return { hours: Number(hm[1]) + Number(hm[2]) / 60 };
-  const n = /(?:^|[^\d.])(\d{1,2}(?:\.\d{1,2})?)\s*(?:h\b|hr\b|hrs\b|hours?\b)?/.exec(t);
+  const n = /(?:^|[^\d.])(\d{1,2}(?:\.\d{1,2})?)(?!\d|\.\d)\s*(?:h\b|hr\b|hrs\b|hours?\b)?/.exec(t);
   if (!n) return null;
   if ((t.match(/(?:^|[^\d.])\d{1,2}(?:\.\d{1,2})?(?![\d.])/g) ?? []).length > 1) return null;
   const hours = Number(n[1]);
@@ -89,17 +97,16 @@ export function parseDay(text: string, today: ISODate): ISODate | null {
   if (/\bday before yesterday\b/.test(t)) return addDays(today, -2);
   if (/\byesterday\b/.test(t)) return addDays(today, -1);
 
-  const year = Number(today.slice(0, 4));
   const md = new RegExp(`\\b${MONTH_RE}\\.?\\s+(\\d{1,2})(?:st|nd|rd|th)?\\b`, 'i').exec(t)
     ?? new RegExp(`\\b(\\d{1,2})(?:st|nd|rd|th)?\\s+(?:of\\s+)?${MONTH_RE}\\b`, 'i').exec(t);
   if (md) {
     const [word, day] = /\d/.test(md[1]) ? [md[2], Number(md[1])] : [md[1], Number(md[2])];
-    return validDate(year, monthIndex(word) + 1, day);
+    return nearestDate(today, monthIndex(word) + 1, day);
   }
   const slash = /\b(\d{1,2})\/(\d{1,2})\b/.exec(t);
-  if (slash) return validDate(year, Number(slash[1]), Number(slash[2]));
+  if (slash) return nearestDate(today, Number(slash[1]), Number(slash[2]));
   const nth = /\b(?:the\s+)?(\d{1,2})(st|nd|rd|th)\b/.exec(t);
-  if (nth) return validDate(year, Number(today.slice(5, 7)), Number(nth[1]));
+  if (nth) return validDate(Number(today.slice(0, 4)), Number(today.slice(5, 7)), Number(nth[1]));
 
   const wd = new RegExp(`\\b(last\\s+)?${WEEKDAY_RE}\\b`, 'i').exec(t);
   if (wd) {

@@ -177,6 +177,30 @@ describe('admin payroll tools', () => {
     const again = await tool('generate_run').run(admin(), { period: october, leave_out: leaveOut });
     expect((await tool('discard_draft').run(admin(), { run: (again.data as { run: string }).run })).text).toBe('Discarded the October 2026 draft.');
   });
+
+  it("counts only finalized runs in an admin's own pay (admins can read draft and voided lines)", async () => {
+    const db = service();
+    const august = await openPeriod('2026-08');
+    await ok(db.update('pay_periods', { status: 'locked' }).eq('id', august));
+    const runFor = async (cents: number) => {
+      const [{ id }] = await ok<{ id: string }>(db.insert('payroll_runs', {
+        pay_period_id: august,
+        totals: JSON.stringify({ employee_count: 1, gross_cents: cents, by_code: { REG: { hours: 40, days: 0, amount_cents: cents } } }),
+        lines_input: JSON.stringify([{
+          employee_id: org.admin.employeeId, external_id: null, first_name: 'admin', last_name: 'Test', email: org.admin.email,
+          pay_type: 'hourly', work_state: 'CA', earning_code: 'REG', hours: 40, days: null, rate_cents: cents / 40, amount_cents: cents,
+        }]),
+      }));
+      return id;
+    };
+    const voided = await runFor(100_000);
+    await ok(db.update('payroll_runs', { status: 'finalized' }).eq('id', voided));
+    await ok(db.update('payroll_runs', { status: 'voided', void_reason: 'Wrong rate' }).eq('id', voided));
+    const draft = await runFor(120_000);
+    expect((await tool('show_my_pay').run(admin(), {})).text).toBe('There is no finalized pay for you yet.');
+    await ok(db.update('payroll_runs', { status: 'finalized' }).eq('id', draft));
+    expect((await tool('show_my_pay').run(admin(), {})).text).toBe('Gross pay for August 2026: $1,200.00 (before taxes and deductions).');
+  });
 });
 
 describe('admin people and settings tools', () => {

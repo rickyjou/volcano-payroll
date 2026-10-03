@@ -126,7 +126,7 @@ export function route(input: {
   const { text, context: c, tools, answers, threshold: T, hasPending } = input;
   if (!answers) return { kind: 'llm', reason: 'no decider', confidence: null };
   const intent = picked(answers, 'intent', T);
-  const raw = answers.intent?.type === 'choice' ? answers.intent.confidence : null;
+  const raw = answers.intent?.type === 'choice' && typeof answers.intent.confidence === 'number' ? answers.intent.confidence : null;
   if (!intent) return { kind: 'llm', reason: 'unsure of intent', confidence: raw };
   const conf = intent.confidence;
 

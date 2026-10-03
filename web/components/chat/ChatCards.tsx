@@ -84,6 +84,7 @@ export function ChatCard({ card, send, busy, active }: { card: Card; send: Send;
         </div>
       );
     case 'link':
-      return <a className="button secondary small" href={card.href}>{card.label}</a>;
+      // Only in-app paths: history rows are the user's own and could carry any URL.
+      return card.href.startsWith('/') && !card.href.startsWith('//') ? <a className="button secondary small" href={card.href}>{card.label}</a> : null;
   }
 }

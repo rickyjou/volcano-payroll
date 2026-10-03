@@ -18,6 +18,11 @@ describe('parseAmount', () => {
   ])('%s', (text, expected) => {
     expect(parseAmount(text)).toEqual(expected);
   });
+  it('does not read part of a longer number as an amount', () => {
+    expect(parseAmount('log 100 hours')).toBeNull();
+    expect(parseAmount('log 8.555 hours')).toBeNull();
+    expect(parseAmount('log 8.')).toEqual({ hours: 8 });
+  });
   it('finds nothing when no amount is given', () => {
     expect(parseAmount('log time for the 12th')).toBeNull();
     expect(parseAmount('submit my timesheet')).toBeNull();
@@ -42,6 +47,9 @@ describe('parseDay', () => {
   it('crosses month and year ends', () => {
     expect(parseDay('yesterday', '2026-10-01')).toBe('2026-09-30');
     expect(parseDay('yesterday', '2027-01-01')).toBe('2026-12-31');
+    expect(parseDay('dec 30', '2027-01-04')).toBe('2026-12-30');
+    expect(parseDay('12/30', '2027-01-04')).toBe('2026-12-30');
+    expect(parseDay('oct 20', TODAY)).toBe('2026-10-20');
   });
   it('rejects impossible dates and finds nothing when none is named', () => {
     expect(parseDay('feb 30', TODAY)).toBeNull();

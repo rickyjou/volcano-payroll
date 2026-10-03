@@ -52,7 +52,7 @@ interface Outcome {
   stop?: boolean;
 }
 
-const MAX_MESSAGE = 2000;
+export const MAX_MESSAGE = 2000;
 const TURN_BUDGET_MS = 25_000;
 const LLM_ROUNDS = 4;
 const LLM_TIMEOUT_MS = 20_000;
@@ -184,6 +184,8 @@ async function action(deps: AgentDeps, ctx: ToolCtx, actionId: string, choice: s
   const a = await getAction(deps.db, deps.userId, actionId);
   const tool = a ? toolByName(a.tool) : undefined;
   if (!a || !tool) return reply("That action isn't available any more.", 'action');
+  // The row is the user's own (RLS lets them edit it), so check it like a fresh request.
+  if (!tool.roles.includes(deps.me.role)) return reply("You don't have access to that.", 'action');
 
   if (choice === 'undo') {
     if (a.status !== 'done' || a.undo == null || !tool.undo) return reply("That can't be undone any more.", 'action');
@@ -206,9 +208,14 @@ async function action(deps: AgentDeps, ctx: ToolCtx, actionId: string, choice: s
     return reply('Cancelled. Nothing was changed.', 'action');
   }
   if (!(a.confirmation?.choices ?? CONFIRM_CHOICES).some((c) => c.id === choice)) return reply("That isn't one of the options.", 'action');
+  const v = validateArgs(tool.args, a.args);
+  if (!v.ok) {
+    await moveAction(deps.db, deps.userId, a.id, 'pending', 'failed');
+    return reply(`I couldn't do that: ${v.error}.`, 'action');
+  }
   if (!(await moveAction(deps.db, deps.userId, a.id, 'pending', 'done'))) return reply('That was already handled.', 'action');
   try {
-    const r = await tool.run(ctx, a.args, choice);
+    const r = await tool.run(ctx, v.args, choice);
     const cards = [...(r.cards ?? [])];
     if (r.undo !== undefined && tool.undo) {
       await moveAction(deps.db, deps.userId, a.id, 'done', 'done', r.undo);

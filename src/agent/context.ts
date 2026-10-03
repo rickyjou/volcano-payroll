@@ -7,10 +7,14 @@ import { dayLabel, monthLabel } from './tools/common';
 export async function buildContext(ctx: ToolCtx, page?: string): Promise<AgentContext> {
   const periods = await listPeriods(ctx.db);
   const isApprover = ctx.me.role !== 'employee';
+  // Read once: both the approvals list and the admin's people list need it.
+  const employees = isApprover ? listEmployees(ctx.db) : Promise.resolve([]);
+  // pendingApprovals may return before awaiting it; its failure still surfaces where it is awaited.
+  employees.catch(() => undefined);
   const [payType, pending, people, runs] = await Promise.all([
     payTypeOn(ctx.db, ctx.me.id, ctx.today),
-    isApprover ? pendingApprovals(ctx.db, ctx.me, periods) : Promise.resolve([]),
-    ctx.me.role === 'admin' ? listEmployees(ctx.db).then(peopleRefs) : Promise.resolve([]),
+    isApprover ? pendingApprovals(ctx.db, ctx.me, periods, employees) : Promise.resolve([]),
+    ctx.me.role === 'admin' ? employees.then(peopleRefs) : Promise.resolve([]),
     ctx.me.role === 'admin' ? listRuns(ctx.db) : Promise.resolve([]),
   ]);
   return { me: ctx.me, today: ctx.today, page, payType, periods, current: currentPeriod(periods, ctx.today), pending, people, runs };

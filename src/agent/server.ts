@@ -4,7 +4,7 @@ import { fromUtc, toUtc, type ISODate } from '../lib/dates';
 import { requireEmployee } from '../server/auth';
 import { HttpError } from '../server/http';
 import { userClient } from '../server/volcano';
-import { handleAgentRequest, type AgentRequest } from './agent';
+import { handleAgentRequest, MAX_MESSAGE, type AgentRequest } from './agent';
 import { HttpDecider, type Decider } from './decider';
 import { OpenAiCompatibleLlm, type Llm } from './llm';
 import { DEFAULT_THRESHOLD } from './router';
@@ -26,13 +26,14 @@ export function agentConfigFromEnv(env: Env): AgentConfig {
 /** Checks the request body shape; anything else is a 400. */
 export function parseAgentRequest(body: unknown): AgentRequest {
   const b = (body && typeof body === 'object' ? body : {}) as Record<string, unknown>;
-  const str = (k: string) => (typeof b[k] === 'string' ? (b[k] as string) : undefined);
+  // Labels and page names are echoed into history and prompts, so keep them short.
+  const str = (k: string, max = 200) => (typeof b[k] === 'string' ? (b[k] as string).slice(0, max) : undefined);
   switch (b.type) {
     case 'history':
       return { type: 'history' };
     case 'message':
       if (!str('text')) break;
-      return { type: 'message', text: str('text')!, page: str('page') };
+      return { type: 'message', text: str('text', MAX_MESSAGE)!, page: str('page') };
     case 'action':
       if (!str('actionId') || !str('choice')) break;
       return { type: 'action', actionId: str('actionId')!, choice: str('choice')!, label: str('label') };

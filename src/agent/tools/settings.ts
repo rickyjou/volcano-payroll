@@ -97,6 +97,10 @@ export const revokeApiKey: AgentTool = {
   },
 };
 
+function httpsOnly(url: unknown): void {
+  if (!/^https:\/\//.test(String(url))) throw new Refusal('Webhook URLs must start with https://.');
+}
+
 export const addWebhook: AgentTool = {
   name: 'add_webhook',
   roles: [...ADMIN],
@@ -104,10 +108,11 @@ export const addWebhook: AgentTool = {
   kind: 'write',
   args: { url: { type: 'string', required: true, description: 'An https:// URL' } },
   async confirm(_ctx, a) {
-    if (!/^https:\/\//.test(String(a.url))) throw new Refusal('Webhook URLs must start with https://.');
+    httpsOnly(a.url);
     return { title: `Add a webhook to ${a.url}?`, lines: [`Events: ${EVENTS.join(', ')}`, 'Its signing secret is shown once.'], choices: CONFIRM_CHOICES };
   },
   async run(ctx, a) {
+    httpsOnly(a.url);
     const secret = newWebhookSecret();
     await rows(ctx.db.insert('webhook_endpoints', { url: String(a.url), secret, events: JSON.stringify(EVENTS) }));
     return {
