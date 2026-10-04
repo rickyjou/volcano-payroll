@@ -9,7 +9,7 @@ import { useSession } from '../../../lib/session';
 import { getVolcano } from '../../../lib/volcano';
 import { useDataChanged } from '../../../lib/events';
 
-interface Line { pay_period_id: string; earning_code: string; hours: string | null; days: string | null; amount_cents: number }
+interface Line { run_id: string; pay_period_id: string; earning_code: string; hours: string | null; days: string | null; amount_cents: number }
 
 function History() {
   const { employee } = useSession();
@@ -20,13 +20,17 @@ function History() {
     setError(null);
     try {
       const db = getVolcano();
-      const [periods, sheets, lines] = await Promise.all([
+      const [periods, sheets, all] = await Promise.all([
         listPeriods(),
         q<Timesheet>(db.from('timesheets').select('id,employee_id,pay_period_id,status,rejection_note,submitted_at,approved_at').eq('employee_id', employee!.id)),
-        // RLS returns only this employee's lines, and only from finalized runs.
-        q<Line>(db.from('payroll_run_lines').select('pay_period_id,earning_code,hours,days,amount_cents').eq('employee_id', employee!.id).limit(2000)),
+        q<Line>(db.from('payroll_run_lines').select('run_id,pay_period_id,earning_code,hours,days,amount_cents').eq('employee_id', employee!.id).limit(2000)),
       ]);
-      setData({ periods, sheets, lines });
+      // RLS shows employees only their finalized lines, but admins also see draft and voided runs.
+      const runIds = [...new Set(all.map((l) => l.run_id))];
+      const finalized = employee!.role === 'admin' && runIds.length
+        ? new Set((await q<{ id: string }>(db.from('payroll_runs').select('id').in('id', runIds).eq('status', 'finalized'))).map((r) => r.id))
+        : null;
+      setData({ periods, sheets, lines: finalized ? all.filter((l) => finalized.has(l.run_id)) : all });
     } catch (err) {
       setError(errorMessage(err));
     }

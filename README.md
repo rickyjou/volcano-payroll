@@ -55,6 +55,10 @@ npm run typecheck
 npm run test:integration   # needs the local stack; WIPES the local payroll database
 ```
 
+The integration run ends by restoring your local admin with `npm run bootstrap-admin`, using
+`LOCAL_ADMIN_EMAIL`, `LOCAL_ADMIN_FIRST_NAME` and `LOCAL_ADMIN_LAST_NAME` from `volcano/volcano.env`
+(see `volcano/volcano.env.example`). Without them it prints a reminder instead.
+
 `tests/integration/functions.test.ts`, `agent.test.ts` and `agent-tools.test.ts` also need the functions deployed locally (see above).
 
 ## Chat assistant
