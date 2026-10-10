@@ -1,16 +1,17 @@
 import { describe, expect, it } from 'vitest';
 import { HttpDecider } from '../../src/agent/decider';
 import { OpenAiCompatibleLlm } from '../../src/agent/llm';
+import { RuleDecider } from '../../src/agent/rule-decider';
 import { agentConfigFromEnv, clientToday, handleAgentHttp, parseAgentRequest } from '../../src/agent/server';
 
 describe('agentConfigFromEnv', () => {
-  it('builds the clients only when configured', () => {
-    expect(agentConfigFromEnv({})).toEqual({ decider: null, llm: null, threshold: 0.9 });
+  it('uses the built-in rules without DECIDER_URL, and builds the HTTP clients only when configured', () => {
+    expect(agentConfigFromEnv({})).toEqual({ decider: new RuleDecider(), llm: null, threshold: 0.9 });
     const c = agentConfigFromEnv({ DECIDER_URL: 'http://d', LLM_URL: 'http://l', LLM_MODEL: 'm', AGENT_DECIDER_THRESHOLD: '0.95' });
     expect(c.decider).toBeInstanceOf(HttpDecider);
     expect(c.llm).toBeInstanceOf(OpenAiCompatibleLlm);
     expect(c.threshold).toBe(0.95);
-    expect(agentConfigFromEnv({ LLM_URL: 'http://l', AGENT_DECIDER_THRESHOLD: '7' })).toEqual({ decider: null, llm: null, threshold: 0.9 });
+    expect(agentConfigFromEnv({ LLM_URL: 'http://l', AGENT_DECIDER_THRESHOLD: '7' })).toMatchObject({ llm: null, threshold: 0.9 });
   });
 });
 

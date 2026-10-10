@@ -4,6 +4,7 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import { handleAgentRequest, type AgentDeps, type AgentRequest, type AgentResponse } from '../../src/agent/agent';
 import type { Decider, DeciderAnswer } from '../../src/agent/decider';
 import type { Llm, LlmResult } from '../../src/agent/llm';
+import { RuleDecider } from '../../src/agent/rule-decider';
 import type { Card } from '../../src/agent/types';
 import { ok, openPeriod, resetData, seedOrg, service, type Org, type TestUser } from './helpers';
 
@@ -63,6 +64,15 @@ beforeAll(async () => {
 });
 
 describe('employee time tracking', () => {
+  it('handles routine requests with the built-in rules and no model at all', async () => {
+    const bob = deps(org.bob, 'employee', new RuleDecider());
+    const logged = await say(bob, 'log 3 hours on monday');
+    expect(last(logged).content).toMatch(/^Logged 3h REG for Mon Oct 5\./);
+    expect(card(logged, 'undo')).toBeDefined();
+    await send(bob, { type: 'action', actionId: card(logged, 'undo')!.actionId, choice: 'undo' });
+    expect(last(await say(bob, 'tell me a joke')).content).toMatch(/^I can only handle simple requests right now/);
+    await ok(service().delete('timesheets').eq('employee_id', org.bob.employeeId)); // logging created it
+  });
   const script: Script = {
     'log 4 hours for today': { intent: choice('log_time') },
     'log 8 hours for today': { intent: choice('log_time') },

@@ -3,7 +3,7 @@
 import { addDays } from '../lib/dates';
 import { missingArgs, validateArgs } from './args';
 import { picked, probability, type DeciderAnswer, type DeciderQuestion } from './decider';
-import { isAdditive, parseAmount, parseCode, parseDay, parseFormat, parseMonth } from './parse';
+import { isAdditive, parseAmount, parseCode, parseDay, parseFormat, parseLabel, parseMonth, parseNote, parseUrl } from './parse';
 import { dayLabel, monthLabel } from './tools/common';
 import type { AgentContext, AgentTool, Card, Slot } from './types';
 
@@ -18,7 +18,8 @@ export type Route =
   | { kind: 'tool'; tool: AgentTool; args: Record<string, unknown>; confidence: number }
   | { kind: 'confirm' | 'cancel' | 'help'; confidence: number }
   | { kind: 'ask'; text: string; card: Card; confidence: number }
-  | { kind: 'llm'; reason: string; confidence: number | null };
+  // `tool` and `missing` are set when the intent was clear but the arguments were not.
+  | { kind: 'llm'; reason: string; confidence: number | null; tool?: AgentTool; missing?: string[] };
 
 /** The typed questions for one message. Only questions the role can use are asked. */
 export function deciderQuestions(c: AgentContext, tools: AgentTool[], hasPending: boolean): Record<string, DeciderQuestion> {
@@ -66,6 +67,9 @@ export function deciderQuestions(c: AgentContext, tools: AgentTool[], hasPending
 /** The decider's state: who and when, then the message itself. */
 export const deciderState = (contextText: string, text: string): string => `${contextText}\nMessage: "${text}"`;
 
+/** The message back out of a decider state (for the in-process rule decider). */
+export const messageOf = (state: string): string => /\nMessage: "([\s\S]*)"$/.exec(state)?.[1] ?? state;
+
 const monthOf = (c: AgentContext, periodId: string) => {
   const p = c.periods.find((x) => x.id === periodId);
   return p ? monthLabel(p.start_date) : 'unknown month';
@@ -110,6 +114,9 @@ export function fillArgs(tool: AgentTool, text: string, c: AgentContext, answers
       args[n] = c.runs.find((r) => r.period_id === pid && r.status !== 'voided')?.id;
     },
     format: (n) => { args[n] = parseFormat(text) ?? undefined; },
+    note: (n) => { args[n] = parseNote(text) ?? undefined; },
+    url: (n) => { args[n] = parseUrl(text) ?? undefined; },
+    label: (n) => { args[n] = parseLabel(text) ?? undefined; },
   };
   for (const [name, def] of Object.entries(tool.args)) if (def.slot) fill[def.slot](name);
   return Object.fromEntries(Object.entries(args).filter(([, v]) => v !== undefined));
@@ -138,19 +145,39 @@ export function route(input: {
   if (!tool) return { kind: 'llm', reason: intent.value === 'other' ? 'other' : 'unknown intent', confidence: conf };
   if (tool.kind === 'write' && (probability(answers, 'is_question') ?? 0) >= 0.5) return { kind: 'llm', reason: 'question', confidence: conf };
 
+  // A month that has no pay period must not fall back to the current one ("lock november").
+  const month = parseMonth(text, c.today);
+  const usesPeriod = Object.values(tool.args).some((d) => d.slot === 'period' || d.slot === 'run');
+  if (usesPeriod && month && !picked(answers, 'target_period', T) && !c.periods.some((p) => p.start_date.startsWith(month))) {
+    return { kind: 'llm', reason: 'no such period', tool, missing: [], confidence: conf };
+  }
+
   const filled = fillArgs(tool, text, c, answers, T);
   const missing = missingArgs(tool.args, filled);
   // An amount is required for log_time even though neither hours nor days is required alone.
-  if (tool.name === 'log_time' && filled.hours == null && filled.days == null) return { kind: 'llm', reason: 'no amount', confidence: conf };
+  if (tool.name === 'log_time' && filled.hours == null && filled.days == null) {
+    const ask = filled.day ? askAmount(tool, filled, c) : null;
+    return ask ? { ...ask, confidence: conf } : { kind: 'llm', reason: 'no amount', tool, missing: [...missing, 'amount'], confidence: conf };
+  }
   if (missing.length === 0) {
     const v = validateArgs(tool.args, filled);
-    return v.ok ? { kind: 'tool', tool, args: v.args, confidence: conf } : { kind: 'llm', reason: v.error, confidence: conf };
+    return v.ok ? { kind: 'tool', tool, args: v.args, confidence: conf } : { kind: 'llm', reason: v.error, tool, missing: [], confidence: conf };
   }
   if (missing.length === 1) {
     const ask = askFor(missing[0], tool, filled, c);
     if (ask) return { ...ask, confidence: conf };
   }
-  return { kind: 'llm', reason: `missing ${missing.join(', ')}`, confidence: conf };
+  return { kind: 'llm', reason: `missing ${missing.join(', ')}`, tool, missing, confidence: conf };
+}
+
+/** "How much?" for a day with no amount: the usual full and half day as buttons. */
+function askAmount(tool: AgentTool, filled: Record<string, unknown>, c: AgentContext): { kind: 'ask'; text: string; card: Card } {
+  const option = (label: string, amount: Record<string, number>) => ({ label, request: { tool: tool.name, args: { ...filled, ...amount } } });
+  const options = c.payType === 'daily'
+    ? [option('Full day', { days: 1 }), option('Half day', { days: 0.5 })]
+    : [option('8 hours', { hours: 8 }), option('4 hours', { hours: 4 })];
+  const prompt = `How much for ${dayLabel(filled.day as string)}?`;
+  return { kind: 'ask', text: `${prompt} Pick one, or say e.g. "log 7.5 hours".`, card: { kind: 'choices', prompt, options } };
 }
 
 /** One short question with ready-to-run answers, when the missing value has few options. */

@@ -81,7 +81,7 @@ export class Refusal extends Error {
 export type ArgType = 'string' | 'number' | 'date' | 'month' | 'uuid' | 'uuids' | 'boolean' | { enum: readonly string[] };
 
 /** Where the deterministic path fills an argument from (see router.ts). */
-export type Slot = 'day' | 'code' | 'amount' | 'mode' | 'period' | 'timesheet' | 'timesheets' | 'employee' | 'run' | 'month' | 'format';
+export type Slot = 'day' | 'code' | 'amount' | 'mode' | 'period' | 'timesheet' | 'timesheets' | 'employee' | 'run' | 'month' | 'format' | 'note' | 'url' | 'label';
 
 export interface ArgDef {
   type: ArgType;

@@ -163,7 +163,7 @@ export const voidRun: AgentTool = {
   kind: 'write',
   args: {
     run: { type: 'uuid', required: true, slot: 'run', description: 'The finalized run' },
-    reason: { type: 'string', required: true, description: 'Why the run is being voided' },
+    reason: { type: 'string', required: true, slot: 'note', description: 'Why the run is being voided' },
   },
   async confirm(ctx, a) {
     const { run, month } = await runLabel(ctx, a.run as string);

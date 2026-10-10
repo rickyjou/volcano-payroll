@@ -1,10 +1,11 @@
 // Measures a decider on the labelled cases and picks the confidence threshold.
-//   npm run eval:decider -- [--url http://127.0.0.1:8000] [--threshold 0.9]
+//   npm run eval:decider -- [--url http://127.0.0.1:8000 | --rules] [--threshold 0.9]
 // The router is pure, so each case is asked once and then replayed at several thresholds.
 // Exit code 1 when any write error (see eval-judge.ts) happens at the chosen threshold.
 import { readFileSync } from 'node:fs';
 import { describeContext } from '../src/agent/context';
-import { HttpDecider, type DeciderAnswer } from '../src/agent/decider';
+import { HttpDecider, type Decider, type DeciderAnswer } from '../src/agent/decider';
+import { RuleDecider } from '../src/agent/rule-decider';
 import { deciderQuestions, deciderState, route } from '../src/agent/router';
 import { toolsFor } from '../src/agent/tools';
 import { fixtureContext } from '../tests/agent/fixture';
@@ -14,7 +15,8 @@ const flag = (name: string) => {
   const i = process.argv.indexOf(`--${name}`);
   return i > 0 ? process.argv[i + 1] : undefined;
 };
-const url = flag('url') ?? process.env.DECIDER_URL ?? 'http://127.0.0.1:8000';
+const rules = process.argv.includes('--rules');
+const url = rules ? 'the built-in rules' : flag('url') ?? process.env.DECIDER_URL ?? 'http://127.0.0.1:8000';
 const chosen = Number(flag('threshold') ?? process.env.AGENT_DECIDER_THRESHOLD ?? 0.9);
 const THRESHOLDS = [0.7, 0.8, 0.85, 0.9, 0.93, 0.95, 0.97, 0.99];
 
@@ -22,7 +24,7 @@ const cases: Case[] = readFileSync('tests/agent/decider-cases.jsonl', 'utf8').sp
 
 async function main() {
   if (cases.length === 0) throw new Error('tests/agent/decider-cases.jsonl has no cases');
-  const decider = new HttpDecider({ url, timeoutMs: 30_000 });
+  const decider: Decider = rules ? new RuleDecider() : new HttpDecider({ url, timeoutMs: 30_000 });
   const asked: { c: Case; answers: Record<string, DeciderAnswer>; ms: number }[] = [];
   for (const c of cases) {
     const ctx = fixtureContext(c.role);

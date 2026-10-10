@@ -18,7 +18,6 @@
     "db:migrate": "npm run db:generate && volcano migrations deploy --all -d payroll",
     "bootstrap-admin": "tsx --env-file=volcano/volcano.env scripts/bootstrap-admin.ts",
     "cloud": "sh scripts/volcano-cloud.sh",
-    "dev:decider": "tsx scripts/dev-decider.ts",
     "eval:decider": "tsx scripts/eval-decider.ts"
   },
   "dependencies": {

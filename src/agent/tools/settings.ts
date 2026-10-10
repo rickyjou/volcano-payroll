@@ -65,7 +65,7 @@ export const createApiKey: AgentTool = {
   roles: [...ADMIN],
   description: 'create an API key a payroll provider can use to read finalized runs',
   kind: 'write',
-  args: { name: { type: 'string', required: true, description: 'What the key is for, e.g. "Gusto connector"' } },
+  args: { name: { type: 'string', required: true, slot: 'label', description: 'What the key is for, e.g. "Gusto connector"' } },
   async confirm(_ctx, a) {
     return { title: `Create an API key named "${a.name}"?`, lines: ['The key is shown once. Copy it straight away.'], choices: CONFIRM_CHOICES };
   },
@@ -106,7 +106,7 @@ export const addWebhook: AgentTool = {
   roles: [...ADMIN],
   description: 'add a webhook URL to be notified when payroll runs are finalized or voided',
   kind: 'write',
-  args: { url: { type: 'string', required: true, description: 'An https:// URL' } },
+  args: { url: { type: 'string', required: true, slot: 'url', description: 'An https:// URL' } },
   async confirm(_ctx, a) {
     httpsOnly(a.url);
     return { title: `Add a webhook to ${a.url}?`, lines: [`Events: ${EVENTS.join(', ')}`, 'Its signing secret is shown once.'], choices: CONFIRM_CHOICES };

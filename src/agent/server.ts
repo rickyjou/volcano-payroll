@@ -7,17 +7,21 @@ import { userClient } from '../server/volcano';
 import { handleAgentRequest, MAX_MESSAGE, type AgentRequest } from './agent';
 import { HttpDecider, type Decider } from './decider';
 import { OpenAiCompatibleLlm, type Llm } from './llm';
+import { RuleDecider } from './rule-decider';
 import { DEFAULT_THRESHOLD } from './router';
 
 type Env = Record<string, string | undefined>;
 
 export interface AgentConfig { decider: Decider | null; llm: Llm | null; threshold: number }
 
-/** Server-only variables: DECIDER_URL/TOKEN/MODEL, LLM_URL/TOKEN/MODEL, AGENT_DECIDER_THRESHOLD. */
+/**
+ * Server-only variables: DECIDER_URL/TOKEN/MODEL, LLM_URL/TOKEN/MODEL, AGENT_DECIDER_THRESHOLD.
+ * Without DECIDER_URL the built-in keyword rules decide, so routine requests need no model.
+ */
 export function agentConfigFromEnv(env: Env): AgentConfig {
   const threshold = Number(env.AGENT_DECIDER_THRESHOLD);
   return {
-    decider: env.DECIDER_URL ? new HttpDecider({ url: env.DECIDER_URL, token: env.DECIDER_TOKEN || undefined, model: env.DECIDER_MODEL || undefined }) : null,
+    decider: env.DECIDER_URL ? new HttpDecider({ url: env.DECIDER_URL, token: env.DECIDER_TOKEN || undefined, model: env.DECIDER_MODEL || undefined }) : new RuleDecider(),
     llm: env.LLM_URL && env.LLM_MODEL ? new OpenAiCompatibleLlm({ url: env.LLM_URL, model: env.LLM_MODEL, token: env.LLM_TOKEN || undefined }) : null,
     threshold: threshold > 0 && threshold <= 1 ? threshold : DEFAULT_THRESHOLD,
   };

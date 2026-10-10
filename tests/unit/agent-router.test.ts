@@ -61,8 +61,16 @@ describe('route', () => {
     expect(card.options.map((o) => o.label)).toEqual(['Today (Wed Oct 7)', 'Yesterday (Tue Oct 6)']);
     expect(card.options[1].request).toEqual({ tool: 'log_time', args: { code: 'REG', hours: 8, mode: 'set', day: '2026-10-06' } });
   });
-  it('goes to the LLM when no amount was given', () => {
-    expect(go('employee', 'log time today', { intent: choice('log_time') })).toMatchObject({ kind: 'llm', reason: 'no amount' });
+  it('asks how much when only the amount is missing, and goes to the LLM when the day is too', () => {
+    const r = go('employee', 'log time today', { intent: choice('log_time') });
+    expect(r.kind).toBe('ask');
+    const card = (r as { card: { prompt: string; options: { label: string; request: { tool: string; args: object } }[] } }).card;
+    expect(card.prompt).toBe('How much for Wed Oct 7?');
+    expect(card.options.map((o) => o.label)).toEqual(['8 hours', '4 hours']);
+    expect(card.options[0].request).toEqual({ tool: 'log_time', args: { day: '2026-10-07', code: 'REG', mode: 'set', hours: 8 } });
+    const daily = route({ text: 'log time today', context: { ...context('employee'), payType: 'daily' }, tools: toolsFor('employee'), answers: { intent: choice('log_time') }, threshold: T, hasPending: false });
+    expect((daily as { card: { options: { label: string }[] } }).card.options.map((o) => o.label)).toEqual(['Full day', 'Half day']);
+    expect(go('employee', 'I worked', { intent: choice('log_time') })).toMatchObject({ kind: 'llm', reason: 'no amount', missing: ['day', 'amount'] });
   });
   it('picks a timesheet, all of them, or asks which', () => {
     expect(go('manager', "approve Hal's timesheet", { intent: choice('approve_timesheets'), target_timesheet: choice(HAL.id) }))
@@ -72,8 +80,14 @@ describe('route', () => {
     const ask = go('manager', 'approve a timesheet', { intent: choice('approve_timesheets'), target_timesheet: choice(HAL.id, 0.6) });
     expect(ask.kind).toBe('ask');
   });
-  it('sends returning without a note to the LLM (it must write the note)', () => {
-    expect(go('manager', "return hal's", { intent: choice('return_timesheet'), target_timesheet: choice(HAL.id) })).toMatchObject({ kind: 'llm', reason: 'missing note' });
+  it('reads a return note from the message, and sends one without a note to the LLM', () => {
+    expect(go('manager', "return hal's timesheet: tuesday is missing", { intent: choice('return_timesheet'), target_timesheet: choice(HAL.id) }))
+      .toMatchObject({ kind: 'tool', args: { timesheet: HAL.id, note: 'Tuesday is missing' } });
+    expect(go('manager', "return hal's", { intent: choice('return_timesheet'), target_timesheet: choice(HAL.id) })).toMatchObject({ kind: 'llm', reason: 'missing note', missing: ['note'] });
+  });
+  it('reads webhook URLs and API key names', () => {
+    expect(go('admin', 'add a webhook to https://example.com/hook.', { intent: choice('add_webhook') })).toMatchObject({ kind: 'tool', args: { url: 'https://example.com/hook' } });
+    expect(go('admin', 'create an api key for Gusto sync', { intent: choice('create_api_key') })).toMatchObject({ kind: 'tool', args: { name: 'Gusto sync' } });
   });
   it('confirms or cancels only when something is waiting', () => {
     expect(go('employee', 'yes', { intent: choice('confirm') }, true)).toMatchObject({ kind: 'confirm' });

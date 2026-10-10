@@ -8,7 +8,7 @@ import { buildContext, describeContext } from './context';
 import type { Decider } from './decider';
 import { invoker } from './invoke';
 import type { Llm, LlmMessage } from './llm';
-import { DEFAULT_THRESHOLD, deciderQuestions, deciderState, route, type Answers } from './router';
+import { DEFAULT_THRESHOLD, deciderQuestions, deciderState, route, type Answers, type Route } from './router';
 import {
   CONFIRM_TTL_MS, createAction, getAction, history, latestPending, moveAction, recentTurns, saveMessage, type MessageMeta,
 } from './store';
@@ -131,7 +131,7 @@ async function message(deps: AgentDeps, ctx: ToolCtx, text: string, started: num
       return { ...(await action(deps, ctx, pending!.id, choices[0].id)), meta };
     }
     case 'llm':
-      return { ...(await llmTurn(deps, ctx, context, tools, started)), meta: { path: 'llm', confidence: r.confidence } };
+      return { ...(await llmTurn(deps, ctx, context, tools, started, r)), meta: { path: 'llm', confidence: r.confidence } };
   }
 }
 
@@ -245,10 +245,19 @@ function systemPrompt(c: AgentContext): string {
   ].join('\n');
 }
 
-async function llmTurn(deps: AgentDeps, ctx: ToolCtx, context: AgentContext, tools: AgentTool[], started: number): Promise<Outcome> {
-  if (!deps.llm) {
-    return reply(`I can only handle simple requests right now, such as:\n${HELP[deps.me.role].map((h) => `• ${h}`).join('\n')}`, 'llm');
+/** What to say when the LLM would be needed but none is configured. */
+export function withoutLlm(role: AgentUser['role'], r: Extract<Route, { kind: 'llm' }>): string {
+  if (r.tool && r.missing?.length) {
+    const needs = r.missing.map((n) => (n === 'amount' ? 'how many hours (or days)' : (r.tool!.args[n]?.description ?? n).replace(/^\w/, (ch) => ch.toLowerCase())));
+    return `To ${r.tool.description}, I also need: ${needs.join('; ')}. Please say it again with that included.`;
   }
+  if (r.reason === 'no such period') return `There's no pay period for that month.${role === 'admin' ? ' Say "list pay periods" to see them.' : ''}`;
+  if (r.tool) return "I couldn't read all the details for that. Please rephrase it, or use the screens for this one.";
+  return `I can only handle simple requests right now, such as:\n${HELP[role].map((h) => `• ${h}`).join('\n')}`;
+}
+
+async function llmTurn(deps: AgentDeps, ctx: ToolCtx, context: AgentContext, tools: AgentTool[], started: number, r: Extract<Route, { kind: 'llm' }>): Promise<Outcome> {
+  if (!deps.llm) return reply(withoutLlm(deps.me.role, r), 'llm');
   // The budget covers the whole turn (context, decider, LLM), so count from its start.
   const deadline = started + TURN_BUDGET_MS;
   const turns = await recentTurns(deps.db, deps.userId, 7);

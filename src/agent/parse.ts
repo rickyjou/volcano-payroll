@@ -154,6 +154,38 @@ export const isAdditive = (text: string): boolean =>
   && !/\b(instead|replace|change it to|make it)\b/i.test(text)
   && !/\b(not|no|don'?t|without)\s+(any\s+)?(more|extra|additional|add)\b/i.test(text);
 
+/** The note or reason in "return hal's: tuesday is missing", "void it because rates were wrong",
+ *  "send dee's back, she forgot friday". After a comma it must be two words or more, so
+ *  "…, please" is not read as a note. */
+export function parseNote(text: string): string | null {
+  const t = text.trim();
+  const tidy = (s: string) => {
+    const v = s.trim().replace(/[\s.!]+$/, '');
+    return v.length >= 2 ? v[0].toUpperCase() + v.slice(1) : null;
+  };
+  const colon = t.indexOf(':');
+  if (colon >= 0 && !/^\/\//.test(t.slice(colon + 1))) return tidy(t.slice(colon + 1));
+  const because = /\bbecause\s+.+$/i.exec(t);
+  if (because) return tidy(because[0]);
+  const comma = t.indexOf(',');
+  if (comma < 0) return null;
+  const rest = t.slice(comma + 1).trim();
+  if (rest.split(/\s+/).length < 2 || /^(please|thanks|thank you|now|asap)\b/i.test(rest)) return null;
+  return tidy(rest);
+}
+
+/** The first web address in the message, without trailing punctuation. */
+export function parseUrl(text: string): string | null {
+  return /\bhttps?:\/\/[^\s<>"']+/i.exec(text)?.[0].replace(/[.,;:!?)]+$/, '') ?? null;
+}
+
+/** A name for a new record: "an API key called Gusto sync", "a key for ADP". */
+export function parseLabel(text: string): string | null {
+  const m = /\b(?:called|named)\s+(.+)$/i.exec(text) ?? /\bfor\s+(?:the\s+|our\s+)?(.+)$/i.exec(text);
+  const v = m?.[1].trim().replace(/^["“']|["”'.!]+$/g, '').trim();
+  return v && v.length <= 60 ? v : null;
+}
+
 /** Export format named in the message (preset keys from src/lib/exporters/presets.ts). */
 export function parseFormat(text: string): string | null {
   const t = text.toLowerCase();

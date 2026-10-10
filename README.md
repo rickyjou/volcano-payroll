@@ -69,13 +69,17 @@ admins run the monthly cycle and manage people, pay, settings, API keys and webh
 
 How a message is handled (`src/agent/`):
 
-1. A **decision model** (a "decider", e.g. Strands Decider 2B or Jev) answers typed
-   questions about the message: which tool, which timesheet / employee / month.
-   Dates, hours, earning codes and export formats are read by plain parsers.
-2. When it is confident (`AGENT_DECIDER_THRESHOLD`, default 0.9) and every argument is
-   filled, the tool runs **without an LLM call**. If only the day or the timesheet is
-   missing, the assistant asks with buttons.
+1. A **decider** answers typed questions about the message: which tool, which timesheet /
+   employee / month. By default this is the built-in keyword rules
+   (`src/agent/rule-decider.ts`), which run in the route and need no model. A decision
+   model such as Strands Decider 2B can replace them (`DECIDER_URL`). Dates, hours, earning
+   codes, export formats, notes, URLs and key names are read by plain parsers.
+2. When the decider is confident (`AGENT_DECIDER_THRESHOLD`, default 0.9) and every
+   argument is filled, the tool runs **without an LLM call**. If only the day, the amount or
+   the timesheet is missing, the assistant asks with buttons.
 3. Otherwise a **generative LLM** with tool calling handles the turn, using the same tools.
+   Without one, the assistant says what it needs ("…I also need: what the employee should
+   fix") or lists requests it can handle.
 
 The agent always acts **as the signed-in user** (their token, so RLS and the Functions'
 checks apply) and never uses the service key. Logging your own hours on an empty day
@@ -86,27 +90,36 @@ Server-only variables (in `web/.env.local` locally, frontend variables in the cl
 
 | Variable | Meaning |
 |---|---|
-| `DECIDER_URL`, `DECIDER_TOKEN`, `DECIDER_MODEL` | A Strands Decider-compatible `POST /v1/systemone` endpoint (token and model optional) |
+| `DECIDER_URL`, `DECIDER_TOKEN`, `DECIDER_MODEL` | Optional. A Strands Decider-compatible `POST /v1/systemone` endpoint instead of the built-in rules (token and model optional) |
 | `LLM_URL`, `LLM_MODEL`, `LLM_TOKEN` | An OpenAI-compatible chat-completions endpoint with tool calling (`{LLM_URL}/chat/completions`) |
 | `AGENT_DECIDER_THRESHOLD` | Minimum decider confidence for acting without the LLM (default 0.9) |
 
-Without a decider every message goes to the LLM; without an LLM only requests the decider
-handles work. Locally you can run either:
+**With no variables set, the chat works without any model**: the built-in rules handle the
+routine requests (85% of the labelled messages, with no wrong answers), and everything else
+gets a short reply saying what to include or what to try. Volcano has no hosted models. An
+LLM means calling a provider directly with your own key, stored as a server-only variable,
+and that provider's data-retention terms apply to the payroll data in each turn. A decision
+model can't be self-hosted on Volcano either. To try one locally (downloads ~4.5 GB the first
+time; Apple silicon: `--device mps`):
 
 ```sh
-npm run dev:decider                         # keyword stand-in on :8100 (DEVELOPMENT ONLY)
-# or the real model (downloads ~4.5 GB the first time; Apple silicon: --device mps)
 pip install strands-decider
 strands-decider serve StrandsAgents/strands-decider-2B-hobson-v19 --port 8000
 ```
 
-Then set `DECIDER_URL=http://127.0.0.1:8100` (or `:8000`) in `web/.env.local` and restart `npm run dev`.
+Then set `DECIDER_URL=http://127.0.0.1:8000` in `web/.env.local` and restart `npm run dev`.
+
+A turn runs in the Next.js route, not a Function. Volcano caps a frontend request at 30 s on
+HOBBY (180 s on SUPERAGENT) and ignores `maxDuration`, so the agent keeps a whole turn within
+25 s.
 
 **Choosing the threshold.** `tests/agent/decider-cases.jsonl` holds 150 labelled messages
-(50 per role). `npm run eval:decider -- --url <decider>` reports accuracy, how many turns
-skip the LLM, and wrong answers per threshold, and exits non-zero if any write is wrong at
-the chosen threshold. Use the lowest threshold with no wrong writes, and re-run it whenever
-the model or the questions change. The keyword stand-in fails this on purpose.
+(50 per role). `npm run eval:decider -- --url <decider>` (or `-- --rules` for the built-in
+rules) reports accuracy, how many turns skip the LLM, and wrong answers per threshold. It
+exits non-zero if any write is wrong at the chosen threshold. Use the lowest threshold with no
+wrong writes. Re-run it whenever the model, the rules or the questions change. The rules were
+tuned on this set, so `tests/unit/agent-rule-decider.test.ts` also checks phrasings outside
+it, including ones that must never become writes.
 
 ## Monthly payroll
 
@@ -170,8 +183,13 @@ rm -rf /tmp/payroll-src && mkdir /tmp/payroll-src && git archive HEAD | tar -x -
 npm run cloud -- cloud frontends deploy --name payroll --path /tmp/payroll-src --app-root web \
   --variable-scope scoped --variable NEXT_PUBLIC_VOLCANO_API_URL --variable NEXT_PUBLIC_VOLCANO_ANON_KEY \
   --variable NEXT_PUBLIC_VOLCANO_DATABASE --variable VOLCANO_API_URL --variable VOLCANO_ANON_KEY --variable VOLCANO_DATABASE --variable VOLCANO_SERVICE_KEY \
-  --variable DECIDER_URL --variable DECIDER_TOKEN --variable LLM_URL --variable LLM_MODEL --variable LLM_TOKEN --variable AGENT_DECIDER_THRESHOLD
+  --variable LLM_URL --variable LLM_MODEL --variable LLM_TOKEN
 ```
+
+The deploy fails up front if a scoped `--variable` names a variable that isn't deployed, so
+pass only the chat variables you've set: drop the `LLM_*` flags to run on the built-in rules
+alone, and add `--variable DECIDER_URL` (plus `DECIDER_TOKEN`) or
+`--variable AGENT_DECIDER_THRESHOLD` only when you use them.
 
 Cloud variables:
 

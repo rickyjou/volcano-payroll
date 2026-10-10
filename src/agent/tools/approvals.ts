@@ -173,7 +173,7 @@ export const returnTimesheet: AgentTool = {
   kind: 'write',
   args: {
     timesheet: { type: 'uuid', required: true, slot: 'timesheet', description: 'The timesheet' },
-    note: { type: 'string', required: true, description: 'What the employee should fix' },
+    note: { type: 'string', required: true, slot: 'note', description: 'What the employee should fix' },
   },
   async confirm(ctx, a) {
     const who = await sheetName(ctx, a.timesheet as string);

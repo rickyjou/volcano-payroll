@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { isAdditive, parseAmount, parseCode, parseDay, parseFormat, parseMonth } from '../../src/agent/parse';
+import { isAdditive, parseAmount, parseCode, parseDay, parseFormat, parseLabel, parseMonth, parseNote, parseUrl } from '../../src/agent/parse';
 
 const TODAY = '2026-10-07'; // a Wednesday
 
@@ -122,5 +122,28 @@ describe('phrasings the parsers must not guess (they would become instant writes
     expect(isAdditive('log 8 hours for today, not more')).toBe(false);
     expect(isAdditive('no extra hours, just 8 for today')).toBe(false);
     expect(isAdditive('add 2 more hours')).toBe(true);
+  });
+});
+
+describe('parseNote, parseUrl, parseLabel', () => {
+  it.each([
+    ["return hal's timesheet: wrong hours on the 5th", 'Wrong hours on the 5th'],
+    ["send dee's back, she forgot friday.", 'She forgot friday'],
+    ['void the september run because rates were wrong', 'Because rates were wrong'],
+    ["return hal's, please", null],
+    ["return hal's, typo", null],
+    ["return hal's", null],
+  ])('reads the note in "%s"', (text, note) => {
+    expect(parseNote(text)).toBe(note);
+  });
+  it('reads the first web address', () => {
+    expect(parseUrl('add a webhook to https://example.com/hook?x=1, thanks')).toBe('https://example.com/hook?x=1');
+    expect(parseUrl('add a webhook at http://example.com')).toBe('http://example.com');
+    expect(parseUrl('add a webhook')).toBeNull();
+  });
+  it('reads a name for a new record', () => {
+    expect(parseLabel('create an api key called "Gusto sync"')).toBe('Gusto sync');
+    expect(parseLabel('make a key for the ADP connector')).toBe('ADP connector');
+    expect(parseLabel('create an api key')).toBeNull();
   });
 });

@@ -333,3 +333,28 @@ user loads the chat (no scheduler on HOBBY). Writes made by tools carry
   refresh and the mobile sheet.
 - **In use:** `chat_messages.path`, `confidence` and `latency_ms` show the share
   of turns that avoided the LLM.
+
+## 11. Update 2026-10-09: Volcano's answers and the built-in rules
+
+Volcano support confirmed:
+- No hosted inference or AI gateway. The app calls a model provider directly with its own
+  key, kept in a server-only variable, and that provider's retention terms apply. A model
+  can't practically be self-hosted on Volcano.
+- A route handler must start responding within 60 s. The whole request is capped at 30 s
+  on HOBBY and 180 s on SUPERAGENT, and `maxDuration` is ignored. The 25 s turn budget (§8)
+  stands, and the agent stays in the route (§2). LLM calls from a route are allowed with no
+  egress limits.
+- Each SQL statement is one billed request; BEGIN/COMMIT are free. A Postgres function
+  called once per turn would count as one. Not done yet: measure a turn's count first.
+
+So no decider endpoint exists to point `DECIDER_URL` at. The default decider is now
+`src/agent/rule-decider.ts`: keyword rules, run in-process, answering the same typed
+questions (§4.2). It favours precision. When no rule clearly fits it answers with
+confidence 0.3, which goes to the LLM, or, without one, to a reply naming what's missing.
+On the labelled set it handles 85% of messages with no wrong answers at `T` = 0.9.
+Rules for edits whose fields are free-form (`update_employee`, `update_settings`) are
+left out on purpose, so those go to the LLM. New parsers fill a return or void note, a
+webhook URL and an API key name. `log_time` with a day but no amount asks with buttons.
+A named month with no pay period no longer falls back to the current one. `DECIDER_URL`
+still swaps in a model.
+
