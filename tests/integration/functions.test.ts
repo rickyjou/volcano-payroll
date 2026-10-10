@@ -1,6 +1,6 @@
 // Exercises the deployed functions end to end. Needs, on the local stack:
 //   npm run build:functions && volcano variables deploy && volcano functions deploy --all
-// with VOLCANO_DATABASE and PAYROLL_ALLOW_UNCONFIRMED_EMAIL=true in volcano/volcano.env.
+// with PAYROLL_DATABASE and PAYROLL_ALLOW_UNCONFIRMED_EMAIL=true in volcano/volcano.env.
 import { beforeAll, describe, expect, it } from 'vitest';
 import { newUser, ok, openPeriod, resetData, seedOrg, service, type Org, type TestUser } from './helpers';
 

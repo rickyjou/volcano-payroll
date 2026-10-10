@@ -5417,7 +5417,7 @@ function env(...names) {
   throw new Error(`Missing environment variable ${names[0]}`);
 }
 var apiUrl = () => env("VOLCANO_API_URL", "NEXT_PUBLIC_VOLCANO_API_URL");
-var databaseName = () => process.env.VOLCANO_DATABASE || process.env.NEXT_PUBLIC_VOLCANO_DATABASE || "payroll";
+var databaseName = () => process.env.PAYROLL_DATABASE || process.env.VOLCANO_DATABASE || process.env.NEXT_PUBLIC_VOLCANO_DATABASE || "payroll";
 function userClient(accessToken) {
   const v = new VolcanoAuth({ apiUrl: apiUrl(), anonKey: env("VOLCANO_ANON_KEY", "NEXT_PUBLIC_VOLCANO_ANON_KEY"), accessToken });
   v.database(databaseName());

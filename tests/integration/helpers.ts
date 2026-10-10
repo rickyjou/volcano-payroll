@@ -3,7 +3,7 @@ import { VolcanoAuth } from '@volcano.dev/sdk';
 export const API = process.env.VOLCANO_API_URL ?? 'http://localhost:8000';
 export const ANON = process.env.VOLCANO_ANON_KEY ?? 'ak-0000000000000000000000000000000000000000';
 export const SERVICE = process.env.VOLCANO_SERVICE_KEY ?? 'sk-1111111111111111111111111111111111111111';
-export const DB = process.env.VOLCANO_DATABASE ?? 'payroll';
+export const DB = process.env.PAYROLL_DATABASE ?? process.env.VOLCANO_DATABASE ?? 'payroll';
 export const PASSWORD = 'Integration-Test-Password-1!';
 
 // These tests wipe the database; refuse to run anywhere but the local stack.

@@ -10,8 +10,10 @@ function env(...names: string[]): string {
 
 const apiUrl = () => env('VOLCANO_API_URL', 'NEXT_PUBLIC_VOLCANO_API_URL');
 
+// PAYROLL_DATABASE first: the local stack has one project shared by every local repo, so a
+// project variable as generic as VOLCANO_DATABASE can be set by another app.
 export const databaseName = (): string =>
-  process.env.VOLCANO_DATABASE || process.env.NEXT_PUBLIC_VOLCANO_DATABASE || 'payroll';
+  process.env.PAYROLL_DATABASE || process.env.VOLCANO_DATABASE || process.env.NEXT_PUBLIC_VOLCANO_DATABASE || 'payroll';
 
 /** Acts as the signed-in user; RLS applies. */
 export function userClient(accessToken: string): VolcanoAuth {

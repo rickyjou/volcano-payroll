@@ -42,6 +42,12 @@ npm run dev                                           # http://localhost:3000
 Then open the app, choose **Create your account** with the admin email, and sign in. Passwords need at
 least 15 characters.
 
+The local stack has a single Volcano project shared by every repo you run locally, so project
+variables are shared too. Payroll's Functions therefore read the database name from
+`PAYROLL_DATABASE`, not the generic `VOLCANO_DATABASE`, which another local app may set. Keep
+`VOLCANO_DATABASE` out of `volcano/volcano.env`. In the cloud project, `VOLCANO_DATABASE` still
+works.
+
 Migrations are not tracked by Volcano: every `npm run db:migrate` re-runs all files, so every statement is
 idempotent. Each generated file holds exactly one statement (a Volcano requirement); edit the grouped
 sources in `db/migrations-src/` and regenerate, never the generated files.

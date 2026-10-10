@@ -1,6 +1,6 @@
 // Creates (or promotes) the first admin so someone can sign in and manage the app.
 //   npm run bootstrap-admin -- you@company.com First Last
-// Reads VOLCANO_API_URL / VOLCANO_SERVICE_KEY / VOLCANO_DATABASE from the environment
+// Reads VOLCANO_API_URL / VOLCANO_SERVICE_KEY / PAYROLL_DATABASE (or VOLCANO_DATABASE) from the environment
 // (the npm script loads volcano/volcano.env).
 import { normalizeEmail } from '../src/lib/employee-import';
 import { rows } from '../src/server/db';
