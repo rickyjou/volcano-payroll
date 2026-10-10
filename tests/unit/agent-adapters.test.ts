@@ -77,6 +77,24 @@ describe('OpenAiCompatibleLlm', () => {
     expect(out.text).toBe('Logged it.');
     expect(withoutReasoning('<reasoning>cut off by max_tokens')).toBe('');
   });
+  it('renews a renewing token once when the server rejects it', async () => {
+    const statuses = [403, 200];
+    const auth: string[] = [];
+    const impl = (async (_url: string, init: RequestInit) => {
+      auth.push((init.headers as Record<string, string>).Authorization);
+      return new Response(JSON.stringify({ choices: [{ message: { content: 'ok' } }] }), { status: statuses.shift() });
+    }) as unknown as typeof fetch;
+    let n = 0;
+    const token = { token: async (o?: { renew?: boolean }) => `t${o?.renew ? ++n : n}` };
+    const out = await new OpenAiCompatibleLlm({ url: 'http://llm', model: 'm', token, fetchImpl: impl }).complete({ messages: [], tools: [] });
+    expect(out.text).toBe('ok');
+    expect(auth).toEqual(['Bearer t0', 'Bearer t1']);
+  });
+  it('does not retry a fixed token', async () => {
+    const f = fakeFetch({}, 401);
+    await expect(new OpenAiCompatibleLlm({ url: 'http://llm', model: 'm', token: 'k', fetchImpl: f.impl }).complete({ messages: [], tools: [] })).rejects.toThrow('HTTP 401');
+    expect(f.calls).toHaveLength(1);
+  });
   it("gives up when the turn's remaining time runs out, even before its own timeout", async () => {
     // A server that never answers; only the abort signal ends the request.
     const hang = ((_url: string, init: RequestInit) => new Promise((_, reject) => {

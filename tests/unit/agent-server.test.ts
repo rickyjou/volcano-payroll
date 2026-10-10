@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { HttpDecider } from '../../src/agent/decider';
 import { OpenAiCompatibleLlm } from '../../src/agent/llm';
 import { RuleDecider } from '../../src/agent/rule-decider';
-import { agentConfigFromEnv, clientToday, handleAgentHttp, parseAgentRequest } from '../../src/agent/server';
+import { BedrockTokenSource } from '../../src/agent/bedrock-token';
+import { agentConfigFromEnv, clientToday, llmToken, handleAgentHttp, parseAgentRequest } from '../../src/agent/server';
 
 describe('agentConfigFromEnv', () => {
   it('uses the built-in rules without DECIDER_URL, and builds the HTTP clients only when configured', () => {
@@ -12,6 +13,17 @@ describe('agentConfigFromEnv', () => {
     expect(c.llm).toBeInstanceOf(OpenAiCompatibleLlm);
     expect(c.threshold).toBe(0.95);
     expect(agentConfigFromEnv({ LLM_URL: 'http://l', AGENT_DECIDER_THRESHOLD: '7' })).toMatchObject({ llm: null, threshold: 0.9 });
+  });
+});
+
+describe('llmToken', () => {
+  const BEDROCK = 'https://bedrock-runtime.us-east-2.amazonaws.com/openai/v1';
+  it('prefers a fixed LLM_TOKEN, and renews Bedrock keys itself when there is none', () => {
+    expect(llmToken({ LLM_URL: BEDROCK, LLM_TOKEN: 'k' })).toBe('k');
+    const env = { LLM_URL: BEDROCK, BEDROCK_ACCESS_KEY_ID: 'AK', BEDROCK_SECRET_ACCESS_KEY: 's' };
+    expect(llmToken(env)).toBeInstanceOf(BedrockTokenSource);
+    expect(llmToken(env)).toBe(llmToken(env)); // one cached source across requests
+    expect(llmToken({ LLM_URL: 'http://llm/v1' })).toBeUndefined();
   });
 });
 

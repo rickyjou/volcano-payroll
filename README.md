@@ -100,12 +100,14 @@ Server-only variables (in `web/.env.local` locally, frontend variables in the cl
 | `LLM_URL`, `LLM_MODEL`, `LLM_TOKEN` | An OpenAI-compatible chat-completions endpoint with tool calling (`{LLM_URL}/chat/completions`) |
 | `AGENT_DECIDER_THRESHOLD` | Minimum decider confidence for acting without the LLM (default 0.9) |
 
-For Amazon Bedrock, use its OpenAI-compatible endpoint with a Bedrock API key:
-`LLM_URL=https://bedrock-runtime.us-east-2.amazonaws.com/openai/v1`,
-`LLM_MODEL=openai.gpt-oss-120b-1:0`, `LLM_TOKEN=<Bedrock API key>`. Prefer the 120b model:
-in testing, `gpt-oss-20b` often got weekdays wrong ("Wednesday" as the week before). Bedrock
-doesn't store prompts or use them for training. A short-term key expires within 12 hours, so
-the cloud needs a long-term key.
+For Amazon Bedrock, set `LLM_URL=https://bedrock-runtime.us-east-2.amazonaws.com/openai/v1`
+and `LLM_MODEL=openai.gpt-oss-120b-1:0`, and leave `LLM_TOKEN` empty. The app then signs its own
+short-term Bedrock API keys and renews them before they expire (12 hours at most), so no key
+is rotated by hand. It signs with `BEDROCK_ACCESS_KEY_ID` / `BEDROCK_SECRET_ACCESS_KEY` (the
+cloud: an IAM principal allowed only `bedrock:InvokeModel` and `bedrock:CallWithBearerToken` on
+that model), or locally with your default AWS credentials (`aws login`). Prefer the 120b
+model: in testing, `gpt-oss-20b` often got weekdays wrong. Bedrock doesn't store prompts or use
+them for training.
 
 **With no variables set, the chat works without any model**: the built-in rules handle the
 routine requests (85% of the labelled messages, with no wrong answers), and everything else
@@ -196,11 +198,11 @@ rm -rf /tmp/payroll-src && mkdir /tmp/payroll-src && git archive HEAD | tar -x -
 npm run cloud -- cloud frontends deploy --name payroll --path /tmp/payroll-src --app-root web \
   --variable-scope scoped --variable NEXT_PUBLIC_VOLCANO_API_URL --variable NEXT_PUBLIC_VOLCANO_ANON_KEY \
   --variable NEXT_PUBLIC_VOLCANO_DATABASE --variable VOLCANO_API_URL --variable VOLCANO_ANON_KEY --variable VOLCANO_DATABASE --variable VOLCANO_SERVICE_KEY \
-  --variable LLM_URL --variable LLM_MODEL --variable LLM_TOKEN
+  --variable LLM_URL --variable LLM_MODEL --variable BEDROCK_ACCESS_KEY_ID --variable BEDROCK_SECRET_ACCESS_KEY
 ```
 
 The deploy fails up front if a scoped `--variable` names a variable that isn't deployed, so
-pass only the chat variables you've set: drop the `LLM_*` flags to run on the built-in rules
+pass only the chat variables you've set: drop the `LLM_*` and `BEDROCK_*` flags to run on the built-in rules
 alone, and add `--variable DECIDER_URL` (plus `DECIDER_TOKEN`) or
 `--variable AGENT_DECIDER_THRESHOLD` only when you use them.
 

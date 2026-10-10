@@ -1,5 +1,6 @@
 // Generative-model adapter. v1 ships a client for OpenAI-compatible chat completions
 // with tool calling; another wire format is one more class implementing `Llm`.
+import type { TokenSource } from './bedrock-token';
 
 export interface LlmToolCall { id: string; name: string; args: unknown }
 
@@ -22,7 +23,8 @@ export interface Llm {
 export interface OpenAiCompatibleOptions {
   url: string;
   model: string;
-  token?: string;
+  /** A fixed bearer token, or a source of renewing ones (short-term Bedrock keys). */
+  token?: string | TokenSource;
   timeoutMs?: number;
   /** Caps each reply; reasoning models spend part of it thinking. */
   maxTokens?: number;
@@ -35,22 +37,10 @@ export class OpenAiCompatibleLlm implements Llm {
   constructor(private readonly opts: OpenAiCompatibleOptions) {}
 
   async complete(req: LlmRequest): Promise<LlmResult> {
-    const f = this.opts.fetchImpl ?? fetch;
-    const res = await f(`${this.opts.url.replace(/\/+$/, '')}/chat/completions`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...(this.opts.token ? { Authorization: `Bearer ${this.opts.token}` } : {}),
-      },
-      body: JSON.stringify({
-        model: this.opts.model,
-        messages: req.messages.map(toWire),
-        tools: req.tools.map((t) => ({ type: 'function', function: { name: t.name, description: t.description, parameters: t.parameters } })),
-        tool_choice: 'auto',
-        max_tokens: this.opts.maxTokens ?? 1024,
-      }),
-      signal: AbortSignal.timeout(Math.min(this.opts.timeoutMs ?? 20_000, req.timeoutMs ?? Infinity)),
-    });
+    const signal = AbortSignal.timeout(Math.min(this.opts.timeoutMs ?? 20_000, req.timeoutMs ?? Infinity));
+    let res = await this.post(req, signal);
+    // A renewing token may have been revoked or outlived its credentials: renew once and retry.
+    if ((res.status === 401 || res.status === 403) && typeof this.opts.token === 'object') res = await this.post(req, signal, true);
     if (!res.ok) throw new Error(`LLM returned HTTP ${res.status}`);
     const body = (await res.json()) as { choices?: { message?: { content?: string | null; tool_calls?: WireToolCall[] } }[] };
     const msg = body.choices?.[0]?.message;
@@ -59,6 +49,27 @@ export class OpenAiCompatibleLlm implements Llm {
       text: withoutReasoning(msg.content ?? ''),
       toolCalls: (msg.tool_calls ?? []).map((c) => ({ id: c.id, name: c.function.name, args: parseArgs(c.function.arguments) })),
     };
+  }
+
+  private async post(req: LlmRequest, signal: AbortSignal, renew = false): Promise<Response> {
+    const t = this.opts.token;
+    const token = typeof t === 'object' ? await t.token({ renew }) : t;
+    const f = this.opts.fetchImpl ?? fetch;
+    return f(`${this.opts.url.replace(/\/+$/, '')}/chat/completions`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify({
+        model: this.opts.model,
+        messages: req.messages.map(toWire),
+        tools: req.tools.map((t) => ({ type: 'function', function: { name: t.name, description: t.description, parameters: t.parameters } })),
+        tool_choice: 'auto',
+        max_tokens: this.opts.maxTokens ?? 1024,
+      }),
+      signal,
+    });
   }
 }
 
