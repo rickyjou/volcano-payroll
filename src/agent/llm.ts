@@ -24,6 +24,8 @@ export interface OpenAiCompatibleOptions {
   model: string;
   token?: string;
   timeoutMs?: number;
+  /** Caps each reply; reasoning models spend part of it thinking. */
+  maxTokens?: number;
   fetchImpl?: typeof fetch;
 }
 
@@ -45,6 +47,7 @@ export class OpenAiCompatibleLlm implements Llm {
         messages: req.messages.map(toWire),
         tools: req.tools.map((t) => ({ type: 'function', function: { name: t.name, description: t.description, parameters: t.parameters } })),
         tool_choice: 'auto',
+        max_tokens: this.opts.maxTokens ?? 1024,
       }),
       signal: AbortSignal.timeout(Math.min(this.opts.timeoutMs ?? 20_000, req.timeoutMs ?? Infinity)),
     });
@@ -53,10 +56,15 @@ export class OpenAiCompatibleLlm implements Llm {
     const msg = body.choices?.[0]?.message;
     if (!msg) throw new Error('LLM response has no message');
     return {
-      text: msg.content ?? '',
+      text: withoutReasoning(msg.content ?? ''),
       toolCalls: (msg.tool_calls ?? []).map((c) => ({ id: c.id, name: c.function.name, args: parseArgs(c.function.arguments) })),
     };
   }
+}
+
+/** Reasoning models (gpt-oss on Bedrock) put their thinking in the content; users shouldn't see it. */
+export function withoutReasoning(s: string): string {
+  return s.replace(/<reasoning>[\s\S]*?(<\/reasoning>|$)/g, '').trim();
 }
 
 function parseArgs(s: string): unknown {

@@ -100,6 +100,13 @@ Server-only variables (in `web/.env.local` locally, frontend variables in the cl
 | `LLM_URL`, `LLM_MODEL`, `LLM_TOKEN` | An OpenAI-compatible chat-completions endpoint with tool calling (`{LLM_URL}/chat/completions`) |
 | `AGENT_DECIDER_THRESHOLD` | Minimum decider confidence for acting without the LLM (default 0.9) |
 
+For Amazon Bedrock, use its OpenAI-compatible endpoint with a Bedrock API key:
+`LLM_URL=https://bedrock-runtime.us-east-2.amazonaws.com/openai/v1`,
+`LLM_MODEL=openai.gpt-oss-120b-1:0`, `LLM_TOKEN=<Bedrock API key>`. Prefer the 120b model:
+in testing, `gpt-oss-20b` often got weekdays wrong ("Wednesday" as the week before). Bedrock
+doesn't store prompts or use them for training. A short-term key expires within 12 hours, so
+the cloud needs a long-term key.
+
 **With no variables set, the chat works without any model**: the built-in rules handle the
 routine requests (85% of the labelled messages, with no wrong answers), and everything else
 gets a short reply saying what to include or what to try. Volcano has no hosted models. An

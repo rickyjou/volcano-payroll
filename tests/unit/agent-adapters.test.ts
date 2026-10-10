@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { HttpDecider, picked, probability } from '../../src/agent/decider';
-import { OpenAiCompatibleLlm } from '../../src/agent/llm';
+import { OpenAiCompatibleLlm, withoutReasoning } from '../../src/agent/llm';
 
 function fakeFetch(reply: unknown, status = 200) {
   const calls: { url: string; init: RequestInit }[] = [];
@@ -61,6 +61,7 @@ describe('OpenAiCompatibleLlm', () => {
     expect(f.calls[0].url).toBe('http://llm/v1/chat/completions');
     const body = JSON.parse(String(f.calls[0].init.body));
     expect(body.model).toBe('small');
+    expect(body.max_tokens).toBe(1024);
     expect(body.tools).toEqual([{ type: 'function', function: { name: 'log_time', description: 'Log', parameters: { type: 'object' } } }]);
     expect(body.messages[1]).toEqual({ role: 'assistant', content: null, tool_calls: [{ id: 'c0', type: 'function', function: { name: 'show_timesheet', arguments: '{}' } }] });
     expect(body.messages[2]).toEqual({ role: 'tool', tool_call_id: 'c0', content: '{"ok":true}' });
@@ -69,6 +70,12 @@ describe('OpenAiCompatibleLlm', () => {
     const f = fakeFetch({ choices: [{ message: { content: 'hi', tool_calls: [{ id: 'c', type: 'function', function: { name: 't', arguments: '{bad' } }] } }] });
     const out = await new OpenAiCompatibleLlm({ url: 'http://llm', model: 'm', fetchImpl: f.impl }).complete({ messages: [], tools: [] });
     expect(out.toolCalls[0].args).toBeNull();
+  });
+  it("hides a reasoning model's thinking from the reply", async () => {
+    const f = fakeFetch({ choices: [{ message: { content: '<reasoning>Wednesday is 2026-10-07.</reasoning>Logged it.', tool_calls: [] } }] });
+    const out = await new OpenAiCompatibleLlm({ url: 'http://llm', model: 'm', fetchImpl: f.impl }).complete({ messages: [], tools: [] });
+    expect(out.text).toBe('Logged it.');
+    expect(withoutReasoning('<reasoning>cut off by max_tokens')).toBe('');
   });
   it("gives up when the turn's remaining time runs out, even before its own timeout", async () => {
     // A server that never answers; only the abort signal ends the request.
