@@ -203,6 +203,10 @@ npm run cloud -- cloud frontends deploy --name payroll --path /tmp/payroll-src -
   --variable LLM_URL --variable LLM_MODEL --variable BEDROCK_ACCESS_KEY_ID --variable BEDROCK_SECRET_ACCESS_KEY
 ```
 
+To see which commit the cloud frontend is running, `curl https://<app>/api/version`. It returns
+`{"commit": "<sha>", "committedAt": "<date>"}`, filled in by `git archive` (`export-subst` in
+`.gitattributes`), so it reports the `HEAD` that was exported. Under `next dev` both are `null`.
+
 The deploy fails up front if a scoped `--variable` names a variable that isn't deployed, so
 pass only the chat variables you've set: drop the `LLM_*` and `BEDROCK_*` flags to run on the built-in rules
 alone, and add `--variable DECIDER_URL` (plus `DECIDER_TOKEN`) or

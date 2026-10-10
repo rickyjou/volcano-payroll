@@ -1,0 +1,2 @@
+# `git archive` fills in the commit for the deployed frontend (see src/server/build-info.ts).
+src/server/build-info.ts export-subst
