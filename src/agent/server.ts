@@ -24,7 +24,7 @@ export function agentConfigFromEnv(env: Env): AgentConfig {
   const threshold = Number(env.AGENT_DECIDER_THRESHOLD);
   return {
     decider: env.DECIDER_URL ? new HttpDecider({ url: env.DECIDER_URL, token: env.DECIDER_TOKEN || undefined, model: env.DECIDER_MODEL || undefined }) : new RuleDecider(),
-    llm: env.LLM_URL && env.LLM_MODEL ? new OpenAiCompatibleLlm({ url: env.LLM_URL, model: env.LLM_MODEL, token: llmToken(env) }) : null,
+    llm: llmFromEnv(env),
     threshold: threshold > 0 && threshold <= 1 ? threshold : DEFAULT_THRESHOLD,
   };
 }
@@ -33,7 +33,22 @@ export function agentConfigFromEnv(env: Env): AgentConfig {
 export function llmToken(env: Env): string | TokenSource | undefined {
   if (env.LLM_TOKEN) return env.LLM_TOKEN;
   const region = env.LLM_URL ? bedrockRegion(env.LLM_URL) : null;
-  return region ? bedrockTokenSource(region, env) : undefined;
+  return (region && bedrockTokenSource(region, env)) || undefined;
+}
+
+let warnedNoSigner = false;
+
+/** Bedrock without a way to sign is left unconfigured, so turns get the no-model replies. */
+function llmFromEnv(env: Env): Llm | null {
+  if (!env.LLM_URL || !env.LLM_MODEL) return null;
+  const token = llmToken(env);
+  if (!token && bedrockRegion(env.LLM_URL)) {
+    // The config is built per request; say it once, not on every turn.
+    if (!warnedNoSigner) console.warn('LLM_URL is Bedrock but there is no LLM_TOKEN or BEDROCK_ACCESS_KEY_ID/SECRET_ACCESS_KEY; running without the LLM');
+    warnedNoSigner = true;
+    return null;
+  }
+  return new OpenAiCompatibleLlm({ url: env.LLM_URL, model: env.LLM_MODEL, token });
 }
 
 /** Checks the request body shape; anything else is a 400. */

@@ -164,7 +164,8 @@ export function parseNote(text: string): string | null {
     return v.length >= 2 ? v[0].toUpperCase() + v.slice(1) : null;
   };
   const colon = t.indexOf(':');
-  if (colon >= 0 && !/^\/\//.test(t.slice(colon + 1))) return tidy(t.slice(colon + 1));
+  // Not the colon of a URL ("https://") or a clock time ("9:30").
+  if (colon >= 0 && !/^(\/\/|\d)/.test(t.slice(colon + 1))) return tidy(t.slice(colon + 1));
   const because = /\bbecause\s+.+$/i.exec(t);
   if (because) return tidy(because[0]);
   const comma = t.indexOf(',');

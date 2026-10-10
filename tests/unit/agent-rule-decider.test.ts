@@ -78,6 +78,25 @@ describe('RuleDecider', () => {
     expect(go('employee', 'no thanks', true).kind).toBe('cancel');
   });
 
+  it("treats a yes or no wrapped around a request as the request, so it can't confirm a different card", () => {
+    expect(toolOf(go('admin', 'ok lock october', true))).toBe('lock_period');
+    expect(go('admin', 'yes finalize the run', true).kind).not.toBe('confirm');
+    expect(toolOf(go('manager', 'ok approve hal', true))).toBe('approve_timesheets');
+    expect(toolOf(go('manager', "no, return hal's instead: friday is missing", true))).toBe('return_timesheet');
+    // Only a pronoun left: it answers the card.
+    expect(go('admin', 'sure, void it', true).kind).toBe('confirm');
+  });
+
+  it.each([
+    ['employee', 'help me log 8 hours today', 'log_time'],
+    ['employee', 'how many hours did I log on monday', 'show_timesheet'],
+    ['employee', 'show my pay for 2 months', 'show_my_pay'],
+    ['manager', 'sure, approve dee', 'approve_timesheets'],
+  ] as const)('[%s] "%s" is read as %s', (role, text, intent) => {
+    const context = fixtureContext(role);
+    expect(decideByRules(text, deciderQuestions(context, toolsFor(role), false)).intent).toMatchObject({ choice: intent });
+  });
+
   it('answers low when nothing fits, so the turn goes to the LLM', () => {
     const a = decideByRules('tell me about the weather', deciderQuestions(fixtureContext('admin'), toolsFor('admin'), false));
     expect(a.intent).toMatchObject({ choice: 'other', confidence: 0.3 });

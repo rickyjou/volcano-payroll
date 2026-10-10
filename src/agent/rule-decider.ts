@@ -30,6 +30,11 @@ const NO = /^(no|nope|cancel|stop|never ?mind|forget it|don'?t)\b/;
 const MONTH = /\b(jan(uary)?|feb(ruary)?|mar(ch)?|apr(il)?|june?|july?|aug(ust)?|sept?(ember)?|oct(ober)?|nov(ember)?|dec(ember)?|next month|this month|last month)\b/;
 const DAYISH = /\b(today|yesterday|(mon|tues?|wed(nes)?|thu(rs)?|fri|sat(ur)?|sun)(day)?|\d{1,2}(st|nd|rd|th)|time|hours?|entry|entries)\b/;
 const TIME_WORD = /\b(\d+(\.\d+)?|hours?|hrs?|h|days?|time|pto|sick|holiday|vacation)\b/;
+/** Questions and requests to see something, which mention hours but don't log them. */
+const ASKING = /^(what|how many|how much|when|which|did i|show|list|see)\b/;
+/** Words that only answer a confirmation card; what's left once they go is the request. */
+const ANSWER_WORDS = /\b(yes|yep|yeah|yup|ok|okay|sure|confirm(ed)?|go|ahead|do|please|sounds|good|no|nope|cancel|stop|never|mind|forget|don'?t|thanks?|thank|you|and|it|that|this|them)\b/g;
+const META = new Set(['confirm', 'cancel', 'help']);
 
 // Checked in order; the first that fits wins. Specific phrasings come before the
 // general ones that would also match them ("create an api key" before "generate").
@@ -75,14 +80,14 @@ const RULES: Rule[] = [
 
   // Approvals
   { intent: 'return_timesheet', test: has(/\b(return|reject|bounce)\b|\bsend\b.*\bback\b/) },
-  { intent: 'approve_timesheets', test: has(/^(ok(ay)?,? |please |yes,? )?approve\b/) },
+  { intent: 'approve_timesheets', test: has(/^((ok(ay)?|please|yes|yep|yeah|sure) )*approve\b/) },
   { intent: 'list_pending_approvals', test: has(/\b(approv(e|al|als)|pending|waiting)\b/) },
   { intent: 'team_status', test: has(/\bteam\b|\bwho\b.*\b(submitted|started|logged)\b/) },
   { intent: 'show_employee_timesheet', test: (t, x) => x.timesheets.length === 1 && !/\b(my|i)\b/.test(t) && /\b(timesheet|time ?sheet|log(ged)?|hours|show|open|see)\b/.test(t) },
 
   // One's own time and pay
   { intent: 'clear_time', test: (t) => /\b(clear|remove|delete|erase|wipe)\b/.test(t) && DAYISH.test(t) },
-  { intent: 'log_time', test: (t) => (/\b(log|add|record|put|worked|work|did|took|take|enter|book)\b/.test(t) && TIME_WORD.test(t)) || (parseAmount(t) != null && /\b(today|yesterday|on|for)\b/.test(t)) },
+  { intent: 'log_time', test: (t) => !ASKING.test(t) && ((/\b(log|add|record|put|worked|work|did|took|take|enter|book)\b/.test(t) && TIME_WORD.test(t)) || (parseAmount(t) != null && /\b(today|yesterday|on|for)\b/.test(t))) },
   { intent: 'show_profile', test: has(/\b(profile|my (hourly |daily )?rate|my salary|my manager|pay type)\b/) },
   { intent: 'show_my_pay', test: has(/\b(my pay|paid|paycheck|pay ?slip|earn(ed)?|gross)\b/) },
   { intent: 'show_timesheet', test: has(/\b(timesheet|time ?sheet|my hours|what did i log|logged)\b|\bhow many hours\b/) },
@@ -104,6 +109,21 @@ function named(t: string, criteria: Record<string, string | null>, cut: RegExp):
       return (!!first && first.length >= 2 && said.includes(` ${first} `)) || said.includes(` ${name.trim()} `) || (!!email && t.includes(email));
     })
     .map(([id]) => id);
+}
+
+/**
+ * The first rule that fits, except that a yes/no or "help" wrapped around a request is the
+ * request: "ok, lock october" must not confirm whatever card is waiting. A request with
+ * nothing but a pronoun left ("approve it, yes") still answers the card.
+ */
+function intentRule(t: string, x: Targets): Rule | undefined {
+  const rule = RULES.find((r) => r.test(t, x));
+  if (!rule || !META.has(rule.intent)) return rule;
+  // "don't submit it" is a refusal, not a request; only "no, <something else>" is.
+  if (rule.intent === 'cancel' && !/^(no|nope)\b/.test(t)) return rule;
+  const task = RULES.find((r) => !META.has(r.intent) && r.intent !== 'other' && r.test(t, x));
+  if (!task) return rule;
+  return rule.intent === 'help' || words(t.replace(ANSWER_WORDS, ' ')) > 1 ? task : rule;
 }
 
 const choice = (value: string, confidence: number): DeciderAnswer => ({ type: 'choice', choice: value, confidence, probabilities: { [value]: confidence } });
@@ -138,7 +158,7 @@ export function decideByRules(message: string, questions: Record<string, Decider
     let pick: string | undefined;
     if (name === 'intent') {
       // A rule for a tool this role doesn't have is a miss, not a reason to try the next one.
-      const rule = RULES.find((r) => r.test(t, x));
+      const rule = intentRule(t, x);
       pick = rule && rule.intent !== 'other' && options.includes(rule.intent) ? rule.intent : undefined;
     } else if (name === 'target_timesheet') {
       pick = x.all && sheetIds.length ? 'all' : x.timesheets.length === 1 ? x.timesheets[0] : undefined;

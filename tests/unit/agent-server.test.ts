@@ -25,6 +25,12 @@ describe('llmToken', () => {
     expect(llmToken(env)).toBe(llmToken(env)); // one cached source across requests
     expect(llmToken({ LLM_URL: 'http://llm/v1' })).toBeUndefined();
   });
+  it("uses the machine's own AWS credentials only in development", () => {
+    expect(llmToken({ LLM_URL: BEDROCK, NODE_ENV: 'development' })).toBeInstanceOf(BedrockTokenSource);
+    expect(llmToken({ LLM_URL: BEDROCK, NODE_ENV: 'production' })).toBeUndefined();
+    // Without a way to sign, the chat runs without the LLM rather than sending unsigned calls.
+    expect(agentConfigFromEnv({ LLM_URL: BEDROCK, LLM_MODEL: 'm', NODE_ENV: 'production' }).llm).toBeNull();
+  });
 });
 
 describe('parseAgentRequest', () => {

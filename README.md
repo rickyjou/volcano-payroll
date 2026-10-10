@@ -105,8 +105,9 @@ and `LLM_MODEL=openai.gpt-oss-120b-1:0`, and leave `LLM_TOKEN` empty. The app th
 short-term Bedrock API keys and renews them before they expire (12 hours at most), so no key
 is rotated by hand. It signs with `BEDROCK_ACCESS_KEY_ID` / `BEDROCK_SECRET_ACCESS_KEY` (the
 cloud: an IAM principal allowed only `bedrock:InvokeModel` and `bedrock:CallWithBearerToken` on
-that model, created by `sh scripts/aws/bedrock-signer.sh --create-key`), or locally with your
-default AWS credentials (`aws login`). Prefer the 120b
+that model, created by `sh scripts/aws/bedrock-signer.sh --create-key`), or, under `next dev`
+only, with your default AWS credentials (`aws login`). In production without those keys the
+chat runs without the LLM rather than sign with the host's own credentials. Prefer the 120b
 model: in testing, `gpt-oss-20b` often got weekdays wrong. Bedrock doesn't store prompts or use
 them for training.
 

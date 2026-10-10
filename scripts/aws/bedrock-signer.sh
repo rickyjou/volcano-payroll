@@ -60,7 +60,9 @@ fi
 KEY="$(aws iam create-access-key --user-name "$USER_NAME" --query 'AccessKey.[AccessKeyId,SecretAccessKey]' --output text)"
 ID="$(printf '%s' "$KEY" | cut -f1)"
 SECRET="$(printf '%s' "$KEY" | cut -f2)"
-TMP="$(mktemp)"
+# Next to the env file (same filesystem, so the rename is atomic), and removed on any failure.
+TMP="$(mktemp "$ENV_FILE.XXXXXX")"
+trap 'rm -f "$TMP"' EXIT
 grep -v -E '^(LLM_URL|LLM_MODEL|LLM_TOKEN|BEDROCK_ACCESS_KEY_ID|BEDROCK_SECRET_ACCESS_KEY)=' "$ENV_FILE" > "$TMP" || true
 cat >> "$TMP" <<EOF
 LLM_URL=https://bedrock-runtime.$REGION.amazonaws.com/openai/v1

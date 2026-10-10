@@ -59,13 +59,16 @@ export function bedrockRegion(url: string): string | null {
 const sources = new Map<string, BedrockTokenSource>();
 
 /**
- * Signs with BEDROCK_ACCESS_KEY_ID / BEDROCK_SECRET_ACCESS_KEY when set (the cloud), else with
- * the default AWS credential chain, e.g. a developer's `aws login` session (local).
+ * Signs with BEDROCK_ACCESS_KEY_ID / BEDROCK_SECRET_ACCESS_KEY when set (the cloud), else, in
+ * development only, with the default AWS credential chain, e.g. a developer's `aws login`
+ * session. Null in production without the keys: the host's own AWS credentials (an instance
+ * or container role) must never sign for this app.
  */
-export function bedrockTokenSource(region: string, env: Record<string, string | undefined>): TokenSource {
+export function bedrockTokenSource(region: string, env: Record<string, string | undefined>): TokenSource | null {
   const id = env.BEDROCK_ACCESS_KEY_ID;
   const secret = env.BEDROCK_SECRET_ACCESS_KEY;
-  const key = `${region}|${id ?? 'default chain'}`;
+  if (!(id && secret) && env.NODE_ENV !== 'development') return null;
+  const key = `${region}|${id && secret ? id : 'default chain'}`;
   let source = sources.get(key);
   if (!source) {
     const credentials = id && secret

@@ -133,6 +133,7 @@ describe('parseNote, parseUrl, parseLabel', () => {
     ["return hal's, please", null],
     ["return hal's, typo", null],
     ["return hal's", null],
+    ["return hal's, he logged 9:30 to 5 on monday", 'He logged 9:30 to 5 on monday'],
   ])('reads the note in "%s"', (text, note) => {
     expect(parseNote(text)).toBe(note);
   });

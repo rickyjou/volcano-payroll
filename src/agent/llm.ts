@@ -40,7 +40,10 @@ export class OpenAiCompatibleLlm implements Llm {
     const signal = AbortSignal.timeout(Math.min(this.opts.timeoutMs ?? 20_000, req.timeoutMs ?? Infinity));
     let res = await this.post(req, signal);
     // A renewing token may have been revoked or outlived its credentials: renew once and retry.
-    if ((res.status === 401 || res.status === 403) && typeof this.opts.token === 'object') res = await this.post(req, signal, true);
+    if ((res.status === 401 || res.status === 403) && typeof this.opts.token === 'object') {
+      await res.body?.cancel();
+      res = await this.post(req, signal, true);
+    }
     if (!res.ok) throw new Error(`LLM returned HTTP ${res.status}`);
     const body = (await res.json()) as { choices?: { message?: { content?: string | null; tool_calls?: WireToolCall[] } }[] };
     const msg = body.choices?.[0]?.message;
